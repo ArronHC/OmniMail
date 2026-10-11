@@ -1,0 +1,8 @@
+.realtime-settings { display: grid; gap: 16px; }
+.realtime-settings form { display: grid; gap: 12px; }
+.realtime-settings label { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.realtime-settings select, .realtime-settings textarea, .realtime-settings input:not([type="checkbox"]) { max-width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: inherit; }
+.realtime-settings textarea { width: 100%; min-height: 120px; }
+.realtime-settings table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.realtime-settings th, .realtime-settings td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+.realtime-settings td button { margin: 3px; }
