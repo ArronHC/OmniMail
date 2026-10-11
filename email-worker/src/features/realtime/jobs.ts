@@ -100,10 +100,15 @@ async function executeRealtimeJob(env: Env, id: string): Promise<'done' | 'retry
     // Recheck authorization after IMAP work; revoked accounts never broadcast to clients.
     if (await validSubscription(env, id) && env.REALTIME_UPDATES) {
       const stub = env.REALTIME_UPDATES.get(env.REALTIME_UPDATES.idFromName(subscription.user_id))
-      await stub.fetch('https://updates.internal/publish', { method: 'POST', body: JSON.stringify({
-        type: 'indexed', provider: subscription.provider, accountId: subscription.account_id,
-        subscriptionId: id, measurementId, detectedAt: job.detected_at, receivedAt: job.received_at, indexedAt,
-      }) }).catch(() => undefined)
+      try {
+        const resp = await stub.fetch('https://updates.internal/publish', { method: 'POST', body: JSON.stringify({
+          type: 'indexed', provider: subscription.provider, accountId: subscription.account_id,
+          subscriptionId: id, measurementId, detectedAt: job.detected_at, receivedAt: job.received_at, indexedAt,
+        }) })
+        console.info(JSON.stringify({ event: 'realtime_published', subscriptionId: id, status: resp.status }))
+      } catch (e) {
+        console.error(JSON.stringify({ event: 'realtime_publish_failed', subscriptionId: id, error: String(e) }))
+      }
     }
     const latest = await env.DB.prepare('SELECT requested_seq, completed_seq FROM realtime_jobs WHERE subscription_id = ?')
       .bind(id).first<Job>()
