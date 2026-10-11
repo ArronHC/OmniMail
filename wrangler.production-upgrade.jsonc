@@ -103,7 +103,10 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "REALTIME_ENABLED": "true"
+    "REALTIME_ENABLED": "true",
+    "REALTIME_ACCOUNT_MIN_INTERVAL_MS": "1000",
+    "REALTIME_DEVICE_REQUESTS_PER_MINUTE": "120",
+    "REALTIME_COMPENSATION_SECONDS": "1800"
   },
   "account_id": "d35f92a1959ac86dc6649dc197360239",
   "workers_dev": true,
