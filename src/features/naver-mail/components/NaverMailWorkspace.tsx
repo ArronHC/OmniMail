@@ -1,3 +1,5 @@
+import { refreshLoadedIndex } from '../../realtime/refreshLoadedIndex'
+import { useRealtimeRefresh } from '../../realtime/useRealtime'
 import {
   AlertCircle,
   Check,
@@ -60,6 +62,8 @@ export function NaverMailWorkspace({ enabled, remoteImagesEnabled }: {
   const [searchQuery, setSearchQuery] = useState('')
   const [messages, setMessages] = useState<NaverMailMessageSummary[]>([])
   const [page, setPage] = useState<PageInfo>(emptyPage)
+  const loadedIndex = useRef({ messages, page })
+  useEffect(() => { loadedIndex.current = { messages, page } }, [messages, page])
   const [selected, setSelected] = useState<NaverMailMessageSummary | null>(null)
   const [detail, setDetail] = useState<NaverMailMessageDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -101,11 +105,12 @@ export function NaverMailWorkspace({ enabled, remoteImagesEnabled }: {
     if (!quiet) setLoading(true)
     setError('')
     try {
-      const result = await api.naverMailMessages(accountId, '', searchQuery, controller.signal)
+      const fetchPage = (cursor: string) => api.naverMailMessages(accountId, cursor, searchQuery, controller.signal)
+      const result = quiet ? await refreshLoadedIndex(fetchPage, loadedIndex.current.messages, loadedIndex.current.page) : await fetchPage('')
       if (current !== listRequestId.current) return
       setMessages(result.messages)
       setPage(result.page)
-      setSelected((value) => value && result.messages.some(({ id }) => id === value.id)
+      setSelected((value) => value && (quiet || result.messages.some(({ id }) => id === value.id))
         ? value : null)
     } catch (loadError) {
       if (current === listRequestId.current) setError(errorMessage(loadError))
@@ -123,6 +128,8 @@ export function NaverMailWorkspace({ enabled, remoteImagesEnabled }: {
       setError(errorMessage(refreshError))
     }
   }, [loadAccounts, loadMessages])
+
+  useRealtimeRefresh('naver', accountId, refresh)
 
   useEffect(() => {
     void loadAccounts().catch((loadError) => {

@@ -8,6 +8,7 @@ import { registerPublicRoutes } from './routes/public-routes'
 import { registerTelegramRoutes } from '../features/telegram/telegram-routes'
 import { logWorkerError } from '../shared/observability/structured-log'
 import { d1QuotaResponse } from '../platform/d1/quota-guard'
+import { realtimeRoutes } from '../features/realtime/user-api'
 
 const app = new Hono<AppContext>()
 
@@ -17,6 +18,7 @@ registerTelegramRoutes(app)
 registerAccountRoutes(app)
 registerAdminRoutes(app)
 registerMailRoutes(app)
+app.route('/api/realtime', realtimeRoutes)
 
 app.onError((error, context) => {
   const quota = d1QuotaResponse(context.env.DB)

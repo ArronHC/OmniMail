@@ -111,20 +111,27 @@ async function refreshFolder(
   limit: number,
 ): Promise<void> {
   const now = Math.floor(Date.now() / 1000)
+  const leaseId = crypto.randomUUID()
   const claim = await env.DB.prepare(
-    `UPDATE microsoft_imap_accounts SET last_manual_sync_at = ?, updated_at = ?
+    `UPDATE microsoft_imap_accounts SET last_manual_sync_at = ?, updated_at = ?,
+       sync_lease_id = ?, sync_lease_until = ?
       WHERE id = ?
+        AND status NOT IN ('credential_error', 'permission_error')
+        AND (sync_lease_until IS NULL OR sync_lease_until <= ?)
         AND (last_manual_sync_at IS NULL OR last_manual_sync_at <= ?)`,
-  ).bind(now, now, accountId, now - FOLDER_REFRESH_INTERVAL_SECONDS).run()
+  ).bind(now, now, leaseId, now + 360, accountId, now, now - FOLDER_REFRESH_INTERVAL_SECONDS).run()
   if (!claim.meta.changes) {
     throw new MicrosoftStoreError(429, 'folder_refresh_rate_limited', '文件夹刷新过于频繁，请稍后重试。')
   }
-  const account = await store.get(accountId)
-  const client = await openMicrosoftClient(env, account)
+  let client: MicrosoftImapClient | undefined
   try {
-    await refreshMicrosoftFolderWithClient(env, accountId, folderPath, limit, client, now)
+    const account = await store.get(accountId)
+    client = await openMicrosoftClient(env, account)
+    await refreshMicrosoftFolderWithClient(env, accountId, folderPath, limit, client, now, false, leaseId)
   } finally {
-    await client.close()
+    await client?.close()
+    await env.DB.prepare('UPDATE microsoft_imap_accounts SET sync_lease_id = NULL, sync_lease_until = NULL WHERE id = ? AND sync_lease_id = ?')
+      .bind(accountId, leaseId).run()
   }
 }
 

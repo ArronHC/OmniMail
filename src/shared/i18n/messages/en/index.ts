@@ -1,3 +1,4 @@
+import { enRealtime } from './realtime'
 import { enAdmin } from './admin'
 import { enMailCredentials } from './mail-credentials'
 import { enAdminMail } from './admin-mail'
@@ -22,6 +23,7 @@ import { enVersion } from './version'
 import { enTelegram } from './telegram'
 
 export const englishTranslations: Record<string, string> = {
+  ...enRealtime,
   ...enMailCredentials,
   ...enAdmin,
   ...enAdminMail,

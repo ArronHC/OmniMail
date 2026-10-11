@@ -1,0 +1,27 @@
+services:
+  listener:
+    build: .
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      OMNIMAIL_ORIGIN: ${OMNIMAIL_ORIGIN:?Set the HTTPS Worker origin}
+      DEVICE_KEY_ID: ${DEVICE_KEY_ID:-vps-primary}
+      SERVICE_KEY_FILE: /run/omnimail/service-key
+      DEVICE_PRIVATE_KEY_FILE: /run/omnimail/device-private.pem
+      DEVICE_PASSPHRASE_FILE: /run/omnimail/device-passphrase
+      MAX_CONNECTIONS: ${MAX_CONNECTIONS:-20}
+      RECONCILE_SECONDS: ${RECONCILE_SECONDS:-60}
+      FALLBACK_SECONDS: ${FALLBACK_SECONDS:-300}
+      EVENT_DEBOUNCE_MS: ${EVENT_DEBOUNCE_MS:-250}
+    volumes:
+      - ./secrets:/run/omnimail:ro
+    tmpfs: [/tmp]
+    ports: ["127.0.0.1:9090:9090"]
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

@@ -1,3 +1,4 @@
+import { RealtimeSettings } from '../../realtime/RealtimeSettings'
 import {
   AlertCircle,
   AtSign,
@@ -72,6 +73,8 @@ export function AccountSettings({
   onOpenApiGuide,
   onOpenICloud,
   iCloudWorkspaceEnabled,
+  realtimeAvailable = false,
+  onRealtimeEnabledChange,
 }: {
   user: User
   onUserChange: (user: User) => void
@@ -79,6 +82,8 @@ export function AccountSettings({
   onOpenApiGuide: () => void
   onOpenICloud: () => void
   iCloudWorkspaceEnabled: boolean
+  realtimeAvailable?: boolean
+  onRealtimeEnabledChange?: (enabled: boolean) => void
 }) {
   const [displayName, setDisplayName] = useState(user.displayName)
   const [profileBusy, setProfileBusy] = useState(false)
@@ -294,6 +299,7 @@ export function AccountSettings({
 
         <div className="account-settings-column">
           <TelegramNotificationSettings isSuperAdmin={user.role === 'super_admin'} />
+          {realtimeAvailable && <RealtimeSettings onEnabledChange={onRealtimeEnabledChange} owner={user.role === 'super_admin'} />}
           <section className="admin-card account-card">
             <header>
               <KeyRound size={17} />

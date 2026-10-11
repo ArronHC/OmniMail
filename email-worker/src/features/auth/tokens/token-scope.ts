@@ -1,5 +1,11 @@
 export const FULL_DEVICE_SCOPES = '*'
 export const ANDROID_DEVICE_SCOPES = [
+  'realtime:read',
+  'gmail:accounts:read', 'gmail:messages:read',
+  'microsoft:accounts:read', 'microsoft:messages:read', 'microsoft:folders:read',
+  'qq-mail:accounts:read', 'qq-mail:messages:read',
+  'naver-mail:accounts:read', 'naver-mail:messages:read',
+  'yandex-mail:accounts:read', 'yandex-mail:messages:read',
   'account:write',
   'mailboxes:read',
   'messages:read',
@@ -85,6 +91,9 @@ export async function deviceScopesAllow(scopes: string, request: Request): Promi
   if (scopes === FULL_DEVICE_SCOPES) return true
   const requestMethod = request.method.toUpperCase()
   const path = new URL(request.url).pathname
+  if (requestMethod === 'GET' && (path === '/api/realtime/updates' || path === '/api/realtime/config')) {
+    return hasScope(scopes, 'realtime:read')
+  }
   if (requestMethod === 'GET' && path === '/api/mail-notifications') {
     return hasScope(scopes, 'mail-notifications:read')
   }

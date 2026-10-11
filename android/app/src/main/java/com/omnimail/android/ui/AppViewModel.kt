@@ -1,5 +1,7 @@
 package com.omnimail.android.ui
 
+import com.omnimail.android.data.sync.RealtimeUpdates
+import com.omnimail.android.data.sync.RealtimeConnectionException
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -40,6 +42,8 @@ class AppViewModel(
     private val updateChecker: AppUpdateChecker,
     private val appVersion: String,
 ) : ViewModel() {
+    private var realtimeJob: Job? = null
+    private val realtimeUpdates = RealtimeUpdates(repository)
     private var pendingDeepLinkMessageId: String? = null
     private val _uiState = MutableStateFlow(
         AppUiState(instanceUrl = repository.lastInstanceUrl(), appVersion = appVersion),
@@ -711,6 +715,30 @@ class AppViewModel(
         }
         loadMessages()
     }
+
+    fun setForegroundActive(active: Boolean) {
+        realtimeJob?.cancel()
+        if (!active || !repository.realtimeEnabled()) return
+        realtimeJob = viewModelScope.launch {
+            var attempts = 0
+            var forceRefresh = false
+            while (true) {
+                try {
+                    realtimeUpdates.events(forceRefresh).collect { event ->
+                        attempts = 0
+                        _uiState.update { it.copy(realtimeRevision = it.realtimeRevision + 1, realtimeProvider = event.provider) }
+                    }
+                    forceRefresh = false
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { forceRefresh = e is RealtimeConnectionException && e.authentication }
+                delay((1000L shl attempts.coerceAtMost(6)).coerceAtMost(60000L))
+                attempts++
+            }
+        }
+    }
+
+    fun openExternalMail() = _uiState.update { it.copy(page = AppPage.ExternalMail) }
+    suspend fun externalCredentials(forceRefresh: Boolean = false) = repository.realtimeAccess(forceRefresh)
 
     fun refresh() {
         if (_uiState.value.isRefreshing) return

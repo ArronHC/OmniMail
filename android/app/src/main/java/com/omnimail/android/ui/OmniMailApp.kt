@@ -1,5 +1,9 @@
 package com.omnimail.android.ui
 
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.animation.ValueAnimator
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -65,6 +69,17 @@ fun OmniMailApp(viewModel: AppViewModel) {
             viewModel.dismissError()
         }
     }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, state.stage) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) viewModel.setForegroundActive(true)
+            if (event == Lifecycle.Event.ON_STOP) viewModel.setForegroundActive(false)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        viewModel.setForegroundActive(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer); viewModel.setForegroundActive(false) }
+    }
+
     LaunchedEffect(state.readerPreferences.backgroundSync) {
         MailSyncScheduler.update(context, state.readerPreferences.backgroundSync)
     }
@@ -93,6 +108,7 @@ fun OmniMailApp(viewModel: AppViewModel) {
                         AppPage.Drafts -> DraftsScreen(state, viewModel, contentPadding)
                         AppPage.Profile -> ProfileScreen(state, viewModel, contentPadding)
                         AppPage.Settings -> SettingsScreen(state, viewModel, contentPadding)
+                        AppPage.ExternalMail -> ExternalMailScreen(state, viewModel, contentPadding)
                     }
                 }
             }

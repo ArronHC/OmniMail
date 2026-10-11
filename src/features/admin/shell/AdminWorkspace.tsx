@@ -154,7 +154,7 @@ export function AdminWorkspace({
   if (view === 'logs') return <AuditLogs />
   if (view === 'mail' && user.role === 'super_admin') return <AdminMailManagement remoteImagesEnabled={config.remoteImagesEnabled} />
   if (view === 'account') {
-    return <AccountSettings user={user} onUserChange={onUserChange} onLogout={onLogout} onOpenApiGuide={onOpenApiGuide} onOpenICloud={onOpenICloud} iCloudWorkspaceEnabled={config.iCloudWorkspaceEnabled} />
+    return <AccountSettings onRealtimeEnabledChange={(enabled) => onConfigChange({ ...config, realtimeEnabled: enabled })} realtimeAvailable={config.realtimeAvailable} user={user} onUserChange={onUserChange} onLogout={onLogout} onOpenApiGuide={onOpenApiGuide} onOpenICloud={onOpenICloud} iCloudWorkspaceEnabled={config.iCloudWorkspaceEnabled} />
   }
   if (view === 'api') return <ApiGuide />
 

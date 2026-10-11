@@ -60,6 +60,7 @@ export interface ExternalMailSyncJob {
 }
 
 export type MailQueueJob =
+  | { kind: 'realtime-sync'; subscriptionId: string }
   | ParseJob
   | OutboundJob
   | SearchIndexJob
@@ -90,6 +91,15 @@ export interface CleanupWorkflowParams {
 }
 
 export interface Env {
+  REALTIME_DEVICE_REQUESTS_PER_DAY?: string
+  REALTIME_ACCOUNT_SYNCS_PER_DAY?: string
+  REALTIME_ENABLED?: string
+  REALTIME_SERVICE_KEYS?: string
+  REALTIME_DEVICE_REQUESTS_PER_MINUTE?: string
+  REALTIME_ACCOUNT_MIN_INTERVAL_MS?: string
+  REALTIME_MAX_SUBSCRIPTIONS?: string
+  REALTIME_COMPENSATION_SECONDS?: string
+  REALTIME_UPDATES?: DurableObjectNamespace
   DB: D1Database
   MAIL_BUCKET: R2Bucket
   MAIL_QUEUE: Queue<MailQueueJob>

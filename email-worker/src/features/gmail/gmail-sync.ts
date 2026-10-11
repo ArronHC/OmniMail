@@ -1,3 +1,5 @@
+import { renewAccountSyncLease } from '../../platform/imap/sync-lease'
+import { extendRealtimeCompensation, publishCompensatedIndex } from '../realtime/compensation'
 import { canonicalMailFlags, changedIndexFields, needsIndexTrim, rememberIndexTrim } from '../../platform/imap/index-writes'
 import { ImapConnectionError } from '../../platform/imap/imap-errors'
 import {
@@ -190,7 +192,7 @@ export async function syncGmailAccount(
     const metadata = await client.fetchMetadata(fetchUids)
     const missing = reset ? [] : missingGmailUids(existingUids, metadata)
     const highestUid = Math.max(
-      account.lastSeenUid,
+      reset ? 0 : account.lastSeenUid,
       discovery.scannedThrough,
       ...discovery.uids,
     )
@@ -234,8 +236,11 @@ export async function syncGmailAccount(
       accountId,
       leaseId,
     ))
+    await renewAccountSyncLease(env.DB, 'gmail_imap_accounts', accountId, leaseId)
     await env.DB.batch(statements)
     if (trimNeeded) rememberIndexTrim(env.DB, trimScope, INDEX_MESSAGE_LIMIT)
+    await extendRealtimeCompensation(env, 'gmail', accountId, now)
+    await publishCompensatedIndex(env, 'gmail', accountId)
     return { status: 'synced', retryable: false }
   } catch (error) {
     const code = await recordFailure(env, accountId, leaseId, error, now)

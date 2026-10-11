@@ -21,6 +21,7 @@ export default defineConfig(async () => {
           },
           d1Databases: ['DB'],
           r2Buckets: ['MAIL_BUCKET'],
+          durableObjects: { REALTIME_UPDATES: { className: 'RealtimeUpdates', useSQLite: true } },
           queueProducers: {
             MAIL_QUEUE: { queueName: 'omnimail-mail' },
             NOTIFICATION_QUEUE: { queueName: 'omnimail-notifications' },

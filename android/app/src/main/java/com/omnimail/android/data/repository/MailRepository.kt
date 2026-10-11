@@ -44,10 +44,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 data class ActiveSession(
+    // Optional field preserves older instances and offline session behavior.
     val baseUrl: String,
     val user: SessionUser,
     val appName: String = "OmniMail",
     val replyEnabled: Boolean = false,
+    val realtimeEnabled: Boolean = false,
 )
 
 class SessionExpiredException : Exception("Session expired")
@@ -86,7 +88,7 @@ class MailRepository(
         )
         sessionStore.save(baseUrl, response.refreshToken)
         accessToken = response.accessToken
-        return ActiveSession(baseUrl, response.user, config.appName, config.replyEnabled).also {
+        return ActiveSession(baseUrl, response.user, config.appName, config.replyEnabled, config.realtimeEnabled).also {
             activeSession = it
             cache?.storeSession(it.toCachedSession())
         }
@@ -116,6 +118,7 @@ class MailRepository(
                 response.user,
                 config?.appName ?: "OmniMail",
                 config?.replyEnabled ?: false,
+                config?.realtimeEnabled ?: false,
             )
                 .also {
                     activeSession = it
@@ -359,6 +362,14 @@ class MailRepository(
     }.also { user ->
         activeSession = activeSession?.copy(user = user)
     }
+
+    suspend fun realtimeAccess(forceRefresh: Boolean = false): Pair<String, String> {
+        val session = activeSession ?: throw SessionExpiredException()
+        val token = accessToken ?: throw IOException("Offline session")
+        return session.baseUrl to if (forceRefresh) refreshAccessToken(token) else token
+    }
+
+    fun realtimeEnabled(): Boolean = activeSession?.realtimeEnabled == true
 
     private suspend fun <T> authorized(block: suspend (String, String) -> T): T {
         val session = activeSession ?: throw SessionExpiredException()

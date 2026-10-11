@@ -55,6 +55,7 @@ fun SettingsScreen(state: AppUiState, viewModel: AppViewModel, contentPadding: P
         onBack = viewModel::openMail,
         contentPadding = contentPadding,
     ) {
+        OutlinedButton(onClick = viewModel::openExternalMail) { Text(stringResource(R.string.external_mail)) }
         SettingsSection(stringResource(R.string.mail_content)) {
             SettingSwitch(
                 icon = AppIcon.Shield,

@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class InstanceConfig(
+    val realtimeEnabled: Boolean = false,
     val appName: String = "OmniMail",
     val setupComplete: Boolean = false,
     val replyEnabled: Boolean = false,

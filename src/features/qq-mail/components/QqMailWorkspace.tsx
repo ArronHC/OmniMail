@@ -1,3 +1,5 @@
+import { refreshLoadedIndex } from '../../realtime/refreshLoadedIndex'
+import { useRealtimeRefresh } from '../../realtime/useRealtime'
 import {
   AlertCircle,
   Check,
@@ -71,6 +73,8 @@ export function QqMailWorkspace({ enabled, remoteImagesEnabled, canSend }: {
   const [searchQuery, setSearchQuery] = useState('')
   const [messages, setMessages] = useState<QqMailMessageSummary[]>([])
   const [page, setPage] = useState<PageInfo>(emptyPage)
+  const loadedIndex = useRef({ messages, page })
+  useEffect(() => { loadedIndex.current = { messages, page } }, [messages, page])
   const [selected, setSelected] = useState<QqMailMessageSummary | null>(null)
   const [detail, setDetail] = useState<QqMailMessageDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -115,11 +119,12 @@ export function QqMailWorkspace({ enabled, remoteImagesEnabled, canSend }: {
     if (!quiet) setLoading(true)
     setError('')
     try {
-      const result = await api.qqMailMessages(accountId, '', searchQuery, controller.signal)
+      const fetchPage = (cursor: string) => api.qqMailMessages(accountId, cursor, searchQuery, controller.signal)
+      const result = quiet ? await refreshLoadedIndex(fetchPage, loadedIndex.current.messages, loadedIndex.current.page) : await fetchPage('')
       if (current !== listRequestId.current) return
       setMessages(result.messages)
       setPage(result.page)
-      setSelected((value) => value && result.messages.some(({ id }) => id === value.id)
+      setSelected((value) => value && (quiet || result.messages.some(({ id }) => id === value.id))
         ? value : null)
     } catch (loadError) {
       if (current === listRequestId.current) setError(errorMessage(loadError))
@@ -137,6 +142,8 @@ export function QqMailWorkspace({ enabled, remoteImagesEnabled, canSend }: {
       setError(errorMessage(refreshError))
     }
   }, [loadAccounts, loadMessages])
+
+  useRealtimeRefresh('qq', accountId, refresh)
 
   useEffect(() => {
     void loadAccounts().catch((loadError) => {

@@ -1,6 +1,8 @@
 export type Folder = 'inbox' | 'starred' | 'drafts' | 'sent' | 'trash'
 
 export interface AppConfig {
+  realtimeEnabled?: boolean
+  realtimeAvailable?: boolean
   appName: string
   setupComplete: boolean
   replyEnabled: boolean

@@ -263,4 +263,8 @@
     <string name="error_request_failed">Request failed (%1$d).</string>
     <string name="error_incompatible_response">The server response is not compatible with this app version.</string>
     <string name="error_session_storage">Could not securely save the login session.</string>
+    <string name="external_mail">External mail</string>
+    <string name="external_realtime_note">Foreground updates use authorized real-time sync. Background delivery keeps the existing scheduled behavior. Authorize mailboxes in Web account settings.</string>
+    <string name="external_refresh">Refresh index</string>
+    <string name="external_no_messages">No indexed messages. Connect an account in the Web app.</string>
 </resources>

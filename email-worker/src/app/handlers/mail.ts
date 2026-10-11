@@ -15,6 +15,7 @@ import { consumeQqMailSyncJob } from '../../features/qq-mail/qq-mail-sync'
 import { consumeNaverMailSyncJob } from '../../features/naver-mail/naver-mail-sync'
 import { consumeYandexMailSyncJob } from '../../features/yandex-mail/yandex-mail-sync'
 import { consumeExternalMailSyncJob } from '../../features/external-mail/external-mail-sync'
+import { consumeRealtimeJob } from '../../features/realtime/jobs'
 import type { Env, MailQueueJob, MessageRow, ParseJob, StoredBody } from '../types'
 
 type ParsedAddress = {
@@ -423,6 +424,10 @@ async function consumeSearchIndexJob(
 export async function consumeEmailQueue(batch: MessageBatch<MailQueueJob>, env: Env): Promise<void> {
   await ensureSchema(env.DB)
   for (const message of batch.messages) {
+    if (message.body.kind === 'realtime-sync') {
+      await consumeRealtimeJob(message, env)
+      continue
+    }
     if (message.body.kind === 'gmail-sync') {
       await consumeGmailSyncJob(message, env)
       continue

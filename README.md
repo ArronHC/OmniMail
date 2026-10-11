@@ -946,3 +946,10 @@ OmniMail 支持通过 [LINUX DO Connect](https://connect.linux.do/) 完成第三
 OmniMail 使用 [MIT License](./LICENSE)。
 
 Copyright © 2026 OmniMail contributors.
+
+
+## 可选第三方邮箱实时同步
+
+新增 VPS IMAP IDLE 监听增强，Cloudflare 继续保存凭据、执行增量索引和现有收发功能。管理员信任设备、用户逐邮箱明确授权后启用；无 VPS 继续原有 Cron。Web 和 Android 前台可接收索引更新，Android 后台秒级推送尚未实现，10 秒目标需真实环境验收。
+
+参阅 [部署与回滚](docs/realtime/DEPLOYMENT.md)、[服务商限制](docs/realtime/PROVIDERS.md)、[成本模型](docs/realtime/COST.md)、[验证报告与延迟工具](docs/realtime/VALIDATION.md)。

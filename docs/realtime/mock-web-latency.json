@@ -1,0 +1,47 @@
+[
+  {
+    "id": "mock-visible-1",
+    "source": "mock",
+    "segment": "web",
+    "indexedAt": 1791719636464,
+    "clientDiscoveredAt": 1791719636469,
+    "visibleAt": 1791719636729,
+    "signalToVisibleMs": 265
+  },
+  {
+    "id": "mock-visible-2",
+    "source": "mock",
+    "segment": "web",
+    "indexedAt": 1791719636753,
+    "clientDiscoveredAt": 1791719636765,
+    "visibleAt": 1791719637060,
+    "signalToVisibleMs": 307
+  },
+  {
+    "id": "mock-visible-3",
+    "source": "mock",
+    "segment": "web",
+    "indexedAt": 1791719637073,
+    "clientDiscoveredAt": 1791719637077,
+    "visibleAt": 1791719637360,
+    "signalToVisibleMs": 287
+  },
+  {
+    "id": "mock-visible-4",
+    "source": "mock",
+    "segment": "web",
+    "indexedAt": 1791719637372,
+    "clientDiscoveredAt": 1791719637375,
+    "visibleAt": 1791719637615,
+    "signalToVisibleMs": 243
+  },
+  {
+    "id": "mock-visible-5",
+    "source": "mock",
+    "segment": "web",
+    "indexedAt": 1791719637628,
+    "clientDiscoveredAt": 1791719637636,
+    "visibleAt": 1791719637907,
+    "signalToVisibleMs": 279
+  }
+]
