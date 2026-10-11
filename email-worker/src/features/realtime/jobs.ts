@@ -5,6 +5,7 @@ import { syncMicrosoftAccount } from '../microsoft/microsoft-sync'
 import { syncQqMailAccount } from '../qq-mail/qq-mail-sync'
 import { syncNaverMailAccount } from '../naver-mail/naver-mail-sync'
 import { syncYandexMailAccount } from '../yandex-mail/yandex-mail-sync'
+import { syncExternalMailAccount } from '../external-mail/external-mail-sync'
 import { bounded, PROVIDERS, realtimeEnabled, validSubscription } from './types'
 
 type Job = { requested_seq: number; completed_seq: number; detected_at: number; received_at: number }
@@ -77,7 +78,9 @@ async function executeRealtimeJob(env: Env, id: string): Promise<'done' | 'retry
       : subscription.provider === 'naver' ? syncNaverMailAccount : syncYandexMailAccount
     const result = subscription.provider === 'microsoft'
       ? await syncMicrosoftAccount(env, subscription.account_id, Math.floor(Date.now() / 1000), true)
-      : await sync(env, subscription.account_id)
+      : subscription.provider === 'icloud' || subscription.provider === 'linuxdo'
+        ? await syncExternalMailAccount(env, subscription.provider, subscription.account_id)
+        : await sync(env, subscription.account_id)
     if (result.status !== 'synced') {
       await env.DB.prepare(
         'UPDATE realtime_jobs SET lease_id = NULL, lease_until = 0, next_attempt_at = ? WHERE subscription_id = ? AND lease_id = ?',

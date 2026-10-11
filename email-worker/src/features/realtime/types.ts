@@ -6,6 +6,8 @@ export const PROVIDERS = {
   qq: { table: 'qq_mail_accounts', host: 'imap.qq.com' },
   naver: { table: 'naver_mail_accounts', host: 'imap.naver.com' },
   yandex: { table: 'yandex_mail_accounts', host: 'imap.yandex.com' },
+  icloud: { table: 'icloud_accounts', host: 'imap.mail.me.com' },
+  linuxdo: { table: 'linux_do_mail_accounts', host: 'mail.linux.do' },
 } as const
 export type Provider = keyof typeof PROVIDERS
 export type Subscription = {

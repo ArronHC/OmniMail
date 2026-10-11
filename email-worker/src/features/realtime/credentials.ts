@@ -5,6 +5,8 @@ import { microsoftAccessToken } from '../microsoft/microsoft-token-manager'
 import { qqMailAccountForSync } from '../qq-mail/qq-mail-store'
 import { naverMailAccountForSync } from '../naver-mail/naver-mail-store'
 import { yandexMailAccountForSync } from '../yandex-mail/yandex-mail-store'
+import { ICloudAccountStore } from '../icloud/icloud-store'
+import { LinuxDoMailAccountStore } from '../linux-do-mail/linux-do-mail-store'
 import { PROVIDERS, type Subscription } from './types'
 
 const encoder = new TextEncoder()
@@ -23,7 +25,8 @@ export async function credentialVersion(env: Env, subscription: Subscription) {
   // Refresh-token rotation is routine, not a user credential change. The store
   // increments subscription generation when the user replaces OAuth credentials.
   const columns = subscription.provider === 'microsoft' ? "client_id || ':' || authority"
-    : subscription.provider === 'qq' ? 'authorization_code_cipher' : 'app_password_cipher'
+    : subscription.provider === 'qq' ? 'authorization_code_cipher'
+    : subscription.provider === 'linuxdo' ? 'password_cipher' : 'app_password_cipher'
   const row = await env.DB.prepare(`SELECT ${columns} AS cipher FROM ${table} WHERE id = ? AND user_id = ?`)
     .bind(subscription.account_id, subscription.user_id).first<{ cipher: string }>()
   if (!row) throw new Error('Account unavailable')
@@ -44,6 +47,14 @@ export async function deviceCredential(env: Env, subscription: Subscription) {
     const account = await qqMailAccountForSync(env, subscription.account_id)
     if (!account || account.userId !== subscription.user_id) throw new Error('Account unavailable')
     email = account.email; auth = { pass: account.authorizationCode }
+  } else if (subscription.provider === 'icloud') {
+    const account = await new ICloudAccountStore(env, subscription.user_id).get(subscription.account_id)
+    if (account.userId !== subscription.user_id || !account.icloudEmail || !account.appPassword) throw new Error('Account unavailable')
+    email = account.icloudEmail; auth = { pass: account.appPassword }
+  } else if (subscription.provider === 'linuxdo') {
+    const account = await new LinuxDoMailAccountStore(env, subscription.user_id).get()
+    if (account.id !== subscription.account_id || account.userId !== subscription.user_id || !account.password) throw new Error('Account unavailable')
+    email = account.username; auth = { pass: account.password }
   } else {
     const load = subscription.provider === 'gmail' ? gmailAccountForSync
       : subscription.provider === 'naver' ? naverMailAccountForSync : yandexMailAccountForSync

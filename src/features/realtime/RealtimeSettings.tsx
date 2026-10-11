@@ -10,7 +10,7 @@ type Subscription = { id: string; provider: string; account_id: string; device_i
 type Measurement = { detected_at: number; received_at: number; indexed_at: number; provider: string }
 
 const percentile = (values: number[], p: number) => values.length ? `${Math.round([...values].sort((a, b) => a - b)[Math.ceil(p * values.length) - 1])} ms` : '—'
-const sources = { gmail: 'gmail', microsoft: 'microsoft', qq: 'qq-mail', naver: 'naver-mail', yandex: 'yandex-mail' }
+const sources = { gmail: 'gmail', microsoft: 'microsoft', qq: 'qq-mail', naver: 'naver-mail', yandex: 'yandex-mail', icloud: 'icloud', linuxdo: 'linuxdo-mail' }
 const json = (body: unknown) => ({ method: 'PUT', body: JSON.stringify(body) })
 const time = (value: number | null) => value ? new Date(value).toLocaleString() : '—'
 
@@ -57,8 +57,21 @@ export function RealtimeSettings({ owner, onEnabledChange }: { owner: boolean; o
       const found: Account[] = []
       for (const [provider, path] of Object.entries(sources)) {
         try {
-          const response = await request<{ accounts: Array<{ id: string; name: string; email: string }> }>(`/api/${path}/accounts`)
-          found.push(...response.accounts.map((a) => ({ ...a, provider })))
+          if (provider === 'linuxdo') {
+            // LinuxDO exposes a single account under the hyphenated API prefix.
+            const response = await request<{ account: { id: string; username: string } | null }>('/api/linux-do-mail/account')
+            if (response.account) {
+              const { id, username } = response.account
+              found.push({ id, name: username, email: username, provider })
+            }
+          } else if (provider === 'icloud') {
+            const response = await request<{ accounts: Array<{ id: string; name: string; icloudEmail: string; hasAppPassword: boolean }> }>(`/api/${path}/accounts`)
+            found.push(...response.accounts.filter((a) => a.icloudEmail && a.hasAppPassword)
+              .map((a) => ({ id: a.id, name: a.name, email: a.icloudEmail, provider })))
+          } else {
+            const response = await request<{ accounts: Array<{ id: string; name: string; email: string }> }>(`/api/${path}/accounts`)
+            found.push(...response.accounts.map((a) => ({ ...a, provider })))
+          }
         } catch { /* unavailable integrations stay absent */ }
       }
       setAccounts(found)

@@ -38,7 +38,7 @@ export class WorkerApi {
     const plaintext = Buffer.concat([cipher.update(bytes.subarray(0, -16)), cipher.final()])
     try {
       const result = JSON.parse(plaintext.toString()) as Credential
-      const hosts: Record<string, string> = { gmail: 'imap.gmail.com', microsoft: 'outlook.office365.com', qq: 'imap.qq.com', naver: 'imap.naver.com', yandex: 'imap.yandex.com' }
+      const hosts: Record<string, string> = { gmail: 'imap.gmail.com', microsoft: 'outlook.office365.com', qq: 'imap.qq.com', naver: 'imap.naver.com', yandex: 'imap.yandex.com', icloud: 'imap.mail.me.com', linuxdo: 'mail.linux.do' }
       if (result.subscriptionId !== account.id || result.generation !== account.generation
         || result.provider !== account.provider || result.version !== account.version
         || envelope.aad !== `${account.id}:${account.generation}:${result.expiresAt}`
