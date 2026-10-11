@@ -33,6 +33,7 @@
 - [功能概览](#功能概览)
 - [技术架构](#技术架构)
 - [快速部署](#快速部署)
+  - [生产环境一键部署（VPS 构建）](#生产环境一键部署vps-构建)
 - [首次初始化](#首次初始化)
 - [用户与权限](#用户与权限)
 - [API 与客户端鉴权](#api-与客户端鉴权)
@@ -730,6 +731,155 @@ mail.example.com
 
 OmniMail 只接受数据库中已经创建并启用的完整邮箱地址。其他 Catch-all 地址会在
 SMTP 阶段返回 `Mailbox unavailable`，不会被写入 R2 或 D1。
+
+### 生产环境一键部署（VPS 构建）
+
+本节适用于现有生产实例 `https://mail.arronhc.cc.cd`，与上面的 Cloudflare Deploy
+按钮、Fork + Workers Builds 部署方式不同：本地仓库只负责同步代码，构建和部署都在
+VPS 上执行，Webmail 和 API 最终仍运行在 Cloudflare Worker 上。
+
+```text
+本地仓库 /home/hatch/workspace/omnimail-upgrade
+    |
+    +-- rsync --> VPS /home/arronhc/omni-upgrade
+    |                 |
+    |                 +-- npm run build
+    |                 +-- npm run deploy（自动应用 D1 migration）
+    |                         |
+    |                         v
+    |                 Cloudflare Worker + D1 + R2 + 队列
+    |                         |
+    |                         +--> https://mail.arronhc.cc.cd
+    |
+    +-- 同步监听器源码 --> VPS /home/arronhc/realtime-listener
+                              |
+                              +-- 独立 Docker 容器
+                                      |
+                                      +-- WebSocket --> 浏览器（新邮件推送）
+```
+
+实时监听器是 VPS 上的独立 Docker 容器，不属于 Worker 部署包；它通过 WebSocket
+推送新邮件。更新监听器源码后，需要单独重建容器。
+
+#### 前置条件
+
+- VPS 可用，运维机可通过 `~/workspace/bin/ssh-racknerd` 连接；该 SSH 封装脚本走
+  Tailscale + 代理。运维机和 VPS 均需安装 `rsync`。
+- `CF_TOKEN` 从环境变量读取，内容为 Cloudflare API Token；需具备目标 Worker
+  部署、读取绑定以及目标账户的 **D1 编辑权限**，并具备所用 R2、队列等资源的相应权限。
+  只放环境变量，不写文件。
+- VPS 已安装 **Node.js 22+**，用于构建；`/home/arronhc/omni-upgrade` 中已安装项目依赖
+  （首次准备或依赖变化时执行 `npm ci`），并已有 `wrangler.production-upgrade.jsonc` 生产配置。
+- VPS 已安装 Docker 和 Compose，`/home/arronhc/realtime-listener` 已完成监听器配置。
+
+#### 一键部署
+
+在运维机执行（脚本从环境变量读取 `CF_TOKEN`）：
+
+```bash
+~/workspace/bin/omnimail-deploy
+```
+
+按部署链路归纳，脚本完成以下 5 件事：
+
+1. 同步本地仓库到 VPS，同时将监听器源码同步到独立目录，保留监听器的 `secrets/`
+   和 Docker 配置。
+2. 在 VPS 上执行 `npm run build`。
+3. 使用 `wrangler.production-upgrade.jsonc` 部署 Worker，自动检查并应用 D1 migration。
+4. 执行 `docker compose up --build -d`，重建 VPS 上的实时监听器容器。
+5. 请求网站 `/api/config` 查看 HTTP 状态码，并检查监听器容器状态。
+
+脚本实际日志将“同步监听器代码”单列为第 2 步，验证在标号步骤之后执行；上述是按
+“同步 → 构建 → 部署 → 重建 → 验证”整理的操作顺序。
+
+脚本位于运维机 **`~/workspace/bin/omnimail-deploy`**，不在仓库内，因为它包含环境相关的
+VPS 路径与连接方式。仓库内的 [`scripts/deploy.mjs`](./scripts/deploy.mjs) 是
+`npm run deploy` 调用的底层部署逻辑，负责 D1 迁移和 Worker 发布。
+
+#### 手动分步部署
+
+以下命令从运维机开始执行；第 3 步进入 VPS 会话后，按说明执行远端命令。
+
+**1. rsync 同步代码到 VPS**
+
+排除 `node_modules`、`.git`、`dist`、`.wrangler` 和 `*.tar.gz`。`--delete` 会删除
+远端目标目录中本地已不存在的非排除文件，执行前务必确认源、目标路径。
+
+```bash
+cd /home/hatch/workspace/omnimail-upgrade
+SSH_CMD="ssh -i $HOME/.ssh/racknerd_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ProxyCommand=\"python3 $HOME/workspace/bin/ts_proxy.py %h %p\""
+rsync -az --delete \
+  --exclude 'node_modules' --exclude '.git' --exclude 'dist' \
+  --exclude '.wrangler' --exclude '*.tar.gz' \
+  -e "$SSH_CMD" \
+  ./ arronhc@100.92.242.2:/home/arronhc/omni-upgrade/
+
+# 同步独立监听器源码，保留 VPS 上的 secrets/ 和 Docker 配置
+rsync -az --delete \
+  --exclude 'node_modules' --exclude 'secrets' \
+  -e "$SSH_CMD" \
+  ./realtime-listener/ arronhc@100.92.242.2:/home/arronhc/realtime-listener/src-sync/
+~/workspace/bin/ssh-racknerd \
+  'cd /home/arronhc/realtime-listener && cp -r src-sync/src/. src/ && cp src-sync/package.json package.json && rm -rf src-sync'
+```
+
+rsync 使用与 `ssh-racknerd` 相同的 SSH 密钥和 Tailscale + 代理参数；由于封装脚本
+已固定目标主机，不直接将它作为 rsync 的 `-e` 参数，以免重复传入主机名。
+
+**2. 在 VPS 上构建**
+
+```bash
+~/workspace/bin/ssh-racknerd 'cd /home/arronhc/omni-upgrade && npm run build'
+```
+
+**3. 在 VPS 上部署 Worker（自动应用 D1 migration）**
+
+先进入 VPS 会话：
+
+```bash
+~/workspace/bin/ssh-racknerd
+```
+
+SSH 不会默认转发运维机的环境变量。执行下面的远端命令前，需通过安全的环境注入方式
+在当前 VPS 会话中提供 `CF_TOKEN` 和目标账户的 `CLOUDFLARE_ACCOUNT_ID`；令牌只从
+环境变量读取，不将实际值写入命令、文件或 shell 历史。
+
+```bash
+# 以下命令在 VPS 会话中执行
+cd /home/arronhc/omni-upgrade
+export CLOUDFLARE_API_TOKEN="${CF_TOKEN:?请先从环境变量读取 CF_TOKEN}"
+export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:?请先设置目标账户 ID 环境变量}"
+npm run deploy -- --config wrangler.production-upgrade.jsonc
+unset CF_TOKEN CLOUDFLARE_API_TOKEN
+exit
+```
+
+`npm run deploy` 调用 `scripts/deploy.mjs`，自动定位目标 D1 绑定、应用尚未执行的迁移，
+再发布 Worker；不要替换成只发布 Worker、不执行迁移的 `npx wrangler deploy`。
+
+**4. 重建监听器容器**
+
+```bash
+~/workspace/bin/ssh-racknerd \
+  'cd /home/arronhc/realtime-listener && docker compose up --build -d'
+```
+
+**5. 验证网站与容器状态**
+
+```bash
+curl -sS -o /dev/null -w '网站状态码: %{http_code}\n' \
+  https://mail.arronhc.cc.cd/api/config
+~/workspace/bin/ssh-racknerd \
+  'cd /home/arronhc/realtime-listener && docker compose ps'
+```
+
+网站应返回 HTTP `200`，监听器容器应处于运行状态。随后打开
+`https://mail.arronhc.cc.cd`，确认页面正常，并通过实际收件检查 WebSocket 新邮件推送。
+
+> [!WARNING]
+> `CF_TOKEN` 只从环境变量读取。不要打印令牌（包括调试时的 `echo`、`env` 或
+> `set -x`），不要写进任何文件（包括 `.env`），不要提交到 Git，也不要粘贴到日志或 PR。
+> `CLOUDFLARE_API_TOKEN` 使用同一个令牌，遵循相同的安全要求。
 
 ## 首次初始化
 
