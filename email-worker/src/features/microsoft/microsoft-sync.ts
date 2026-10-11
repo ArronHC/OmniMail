@@ -1,3 +1,5 @@
+import { renewAccountSyncLease } from '../../platform/imap/sync-lease'
+import { extendRealtimeCompensation, publishCompensatedIndex } from '../realtime/compensation'
 import { canonicalMailFlags, changedIndexFields, needsIndexTrim, rememberIndexTrim } from '../../platform/imap/index-writes'
 import type { Env, MailQueueJob, MicrosoftSyncJob } from '../../app/types'
 import { ImapConnectionError } from '../../platform/imap/imap-errors'
@@ -139,6 +141,8 @@ export async function refreshMicrosoftFolderWithClient(
   limit: number,
   client: MicrosoftImapClient,
   now = Math.floor(Date.now() / 1000),
+  incremental = false,
+  leaseId?: string,
 ): Promise<{ uidValidity: number; indexed: number }> {
   const mailbox = await client.examineFolder(folderPath)
   const remoteUids = await client.searchAllUids()
@@ -148,7 +152,10 @@ export async function refreshMicrosoftFolderWithClient(
     Math.max(limit, existing.length),
   )
   const targetUids = remoteUids.slice(-targetCount)
-  const metadata = await client.fetchMetadata(targetUids)
+  const fetchUids = incremental ? [...new Set([
+    ...targetUids.filter((uid) => !existing.includes(uid)), ...targetUids.slice(-20),
+  ])] : targetUids
+  const metadata = await client.fetchMetadata(fetchUids)
   const missing = missingMicrosoftUids(existing, remoteUids)
   const folder = await env.DB.prepare(
     `SELECT uid_validity FROM microsoft_imap_folders
@@ -198,6 +205,7 @@ export async function refreshMicrosoftFolderWithClient(
     accountId,
     folderPath,
   ))
+  if (leaseId) await renewAccountSyncLease(env.DB, 'microsoft_imap_accounts', accountId, leaseId)
   await env.DB.batch(statements)
   if (trimNeeded) rememberIndexTrim(env.DB, trimScope, INDEX_MESSAGE_LIMIT)
   return { uidValidity: mailbox.uidValidity, indexed: metadata.length }
@@ -256,6 +264,7 @@ export async function syncMicrosoftAccount(
   env: Env,
   accountId: string,
   now = Math.floor(Date.now() / 1000),
+  incremental = false,
 ): Promise<MicrosoftSyncResult> {
   const leaseId = crypto.randomUUID()
   if (!await claimLease(env, accountId, leaseId, now)) {
@@ -268,6 +277,7 @@ export async function syncMicrosoftAccount(
     if (!account) throw new MicrosoftStoreError(404, 'account_not_found', 'Microsoft 账号不存在。')
     client = await openMicrosoftClient(env, account)
     const folders = await client.listFolders()
+    await renewAccountSyncLease(env.DB, 'microsoft_imap_accounts', accountId, leaseId)
     await saveMicrosoftFolders(env, accountId, folders, now)
     const inbox = folders.find(({ path }) => path.toUpperCase() === 'INBOX')
     if (!inbox) throw new MicrosoftStoreError(502, 'inbox_unavailable', 'Microsoft INBOX 不可用。')
@@ -278,6 +288,8 @@ export async function syncMicrosoftAccount(
       INITIAL_MESSAGE_LIMIT,
       client,
       now,
+      incremental,
+      leaseId,
     )
     await env.DB.prepare(
       `UPDATE microsoft_imap_accounts
@@ -286,6 +298,8 @@ export async function syncMicrosoftAccount(
               sync_lease_id = NULL, sync_lease_until = NULL, updated_at = ?
         WHERE id = ? AND sync_lease_id = ?`,
     ).bind(now, now + SYNC_INTERVAL_SECONDS, now, accountId, leaseId).run()
+    await extendRealtimeCompensation(env, 'microsoft', accountId, now)
+    await publishCompensatedIndex(env, 'microsoft', accountId)
     return { status: 'synced', retryable: false }
   } catch (error) {
     const code = await recordFailure(env, accountId, leaseId, error, account?.authMode, now)
@@ -323,7 +337,7 @@ export async function enqueueDueMicrosoftSyncs(
   if (!microsoftMailEnabled(env)) return 0
   const { results } = await env.DB.prepare(
     `SELECT id FROM microsoft_imap_accounts
-      WHERE status IN ('active', 'error') AND next_sync_at <= ?
+      WHERE status IN ('active', 'error', 'syncing') AND next_sync_at <= ?
         AND (sync_lease_until IS NULL OR sync_lease_until <= ?)
       ORDER BY next_sync_at, id LIMIT ?`,
   ).bind(now, now, SCHEDULE_BATCH).all<{ id: string }>()
@@ -331,8 +345,9 @@ export async function enqueueDueMicrosoftSyncs(
   for (const account of results) {
     const claimed = await env.DB.prepare(
       `UPDATE microsoft_imap_accounts SET next_sync_at = ?, updated_at = ?
-        WHERE id = ? AND next_sync_at <= ?`,
-    ).bind(now + SYNC_INTERVAL_SECONDS, now, account.id, now).run()
+        WHERE id = ? AND next_sync_at <= ?
+          AND (sync_lease_until IS NULL OR sync_lease_until <= ?)`,
+    ).bind(now + SYNC_INTERVAL_SECONDS, now, account.id, now, now).run()
     if (!claimed.meta.changes) continue
     try {
       const job: MicrosoftSyncJob = {

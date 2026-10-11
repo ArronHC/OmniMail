@@ -5,6 +5,10 @@
   "compatibility_date": "2026-07-27",
   "compatibility_flags": ["nodejs_compat"],
   "keep_vars": true,
+  "durable_objects": {
+    "bindings": [{ "name": "REALTIME_UPDATES", "class_name": "RealtimeUpdates" }]
+  },
+  "migrations": [{ "tag": "realtime-v1", "new_sqlite_classes": ["RealtimeUpdates"] }],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

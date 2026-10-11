@@ -43,7 +43,7 @@ function superAdminEmail(env: Env): string {
 export async function publicConfig(env: Env) {
   const { results } = await env.DB.prepare(
     `SELECT key, value FROM settings WHERE key IN (
-      'setup_complete',
+      'setup_complete', 'realtime_enabled',
       'external_registration_enabled',
       'external_registration_method',
       'registration_domain_policy_mode',
@@ -73,6 +73,8 @@ export async function publicConfig(env: Env) {
 
   return {
     appName: env.APP_NAME || 'OmniMail',
+    realtimeAvailable: env.REALTIME_ENABLED === 'true',
+    realtimeEnabled: env.REALTIME_ENABLED === 'true' && settings.get('realtime_enabled') === '1',
     setupComplete,
     replyEnabled: hasOutboundProviderConfig(env),
     iCloudEnabled: iCloudCredentialsReady(env),

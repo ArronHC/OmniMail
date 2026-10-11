@@ -1,3 +1,5 @@
+import { refreshLoadedIndex } from '../../realtime/refreshLoadedIndex'
+import { useRealtimeRefresh } from '../../realtime/useRealtime'
 import {
   AlertCircle,
   Check,
@@ -61,6 +63,8 @@ export function YandexMailWorkspace({ enabled, remoteImagesEnabled }: {
   const [searchQuery, setSearchQuery] = useState('')
   const [messages, setMessages] = useState<YandexMailMessageSummary[]>([])
   const [page, setPage] = useState<PageInfo>(emptyPage)
+  const loadedIndex = useRef({ messages, page })
+  useEffect(() => { loadedIndex.current = { messages, page } }, [messages, page])
   const [selected, setSelected] = useState<YandexMailMessageSummary | null>(null)
   const [detail, setDetail] = useState<YandexMailMessageDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -103,14 +107,15 @@ export function YandexMailWorkspace({ enabled, remoteImagesEnabled }: {
     if (!quiet) setLoading(true)
     setError('')
     try {
-      const result = await api.yandexMailMessages(accountId, '', searchQuery, controller.signal)
+      const fetchPage = (cursor: string) => api.yandexMailMessages(accountId, cursor, searchQuery, controller.signal)
+      const result = quiet ? await refreshLoadedIndex(fetchPage, loadedIndex.current.messages, loadedIndex.current.page) : await fetchPage('')
       if (current !== listRequestId.current) return
       const nextMessages = result.messages.map((message) => (
         locallyReadMessageIds.current.has(message.id) ? { ...message, isRead: true } : message
       ))
       setMessages(nextMessages)
       setPage(result.page)
-      setSelected((value) => value && nextMessages.some(({ id }) => id === value.id)
+      setSelected((value) => value && (quiet || nextMessages.some(({ id }) => id === value.id))
         ? value : null)
     } catch (loadError) {
       if (current === listRequestId.current) setError(errorMessage(loadError))
@@ -128,6 +133,8 @@ export function YandexMailWorkspace({ enabled, remoteImagesEnabled }: {
       setError(errorMessage(refreshError))
     }
   }, [loadAccounts, loadMessages])
+
+  useRealtimeRefresh('yandex', accountId, refresh)
 
   useEffect(() => {
     void loadAccounts().catch((loadError) => {

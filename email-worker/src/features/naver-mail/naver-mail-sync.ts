@@ -1,3 +1,5 @@
+import { renewAccountSyncLease } from '../../platform/imap/sync-lease'
+import { extendRealtimeCompensation, publishCompensatedIndex } from '../realtime/compensation'
 import { canonicalMailFlags, changedIndexFields, needsIndexTrim, rememberIndexTrim } from '../../platform/imap/index-writes'
 ﻿import { ImapConnectionError } from '../../platform/imap/imap-errors'
 import { naverMailImapEnabled } from './naver-mail-credentials'
@@ -222,8 +224,11 @@ export async function syncNaverMailAccount(
       accountId,
       leaseId,
     ))
+    await renewAccountSyncLease(env.DB, 'naver_mail_accounts', accountId, leaseId)
     await env.DB.batch(statements)
     if (trimNeeded) rememberIndexTrim(env.DB, trimScope, INDEX_MESSAGE_LIMIT)
+    await extendRealtimeCompensation(env, 'naver', accountId, now)
+    await publishCompensatedIndex(env, 'naver', accountId)
     return { status: 'synced', retryable: false }
   } catch (error) {
     const code = await recordFailure(env, accountId, leaseId, error, now)

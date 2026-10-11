@@ -17,7 +17,7 @@ import com.omnimail.android.data.model.DraftSummary
 import com.omnimail.android.data.preferences.ReaderPreferences
 
 enum class AppStage { Restoring, Login, Mail }
-enum class AppPage { Mail, Compose, ICloud, Drafts, Profile, Settings }
+enum class AppPage { Mail, Compose, ICloud, Drafts, Profile, Settings, ExternalMail }
 
 data class ICloudUiState(
     val accounts: List<ICloudAccount> = emptyList(),
@@ -83,6 +83,8 @@ sealed interface VersionCheckState {
 }
 
 data class AppUiState(
+    val realtimeRevision: Long = 0,
+    val realtimeProvider: String = "",
     val stage: AppStage = AppStage.Restoring,
     val page: AppPage = AppPage.Mail,
     val instanceUrl: String = "",

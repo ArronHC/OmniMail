@@ -1,3 +1,5 @@
+import { renewAccountSyncLease } from '../../platform/imap/sync-lease'
+import { extendRealtimeCompensation, publishCompensatedIndex } from '../realtime/compensation'
 import { canonicalMailFlags, changedIndexFields, needsIndexTrim, rememberIndexTrim } from '../../platform/imap/index-writes'
 import { ImapConnectionError } from '../../platform/imap/imap-errors'
 import {
@@ -312,6 +314,7 @@ export async function syncQqMailAccount(
       leaseId,
     ))
     stage = 'persist'
+    await renewAccountSyncLease(env.DB, 'qq_mail_accounts', accountId, leaseId)
     await env.DB.batch(statements)
     if (trimNeeded) rememberIndexTrim(env.DB, trimScope, INDEX_MESSAGE_LIMIT)
     if (diagnostics.reason && diagnostics.reason !== 'scheduled') {
@@ -337,6 +340,8 @@ export async function syncQqMailAccount(
         durationMs: Date.now() - startedAt,
       })
     }
+    await extendRealtimeCompensation(env, 'qq', accountId, now)
+    await publishCompensatedIndex(env, 'qq', accountId)
     return { status: 'synced', retryable: false }
   } catch (error) {
     let code = qqMailSyncErrorCode(error)

@@ -260,4 +260,8 @@
     <string name="error_request_failed">请求失败（%1$d）。</string>
     <string name="error_incompatible_response">服务器响应与当前应用版本不兼容。</string>
     <string name="error_session_storage">无法安全保存登录会话。</string>
+    <string name="external_mail">第三方邮箱</string>
+    <string name="external_realtime_note">前台通过已授权的实时同步更新；后台仍使用原有定时任务。请在 Web 账户设置中授权邮箱。</string>
+    <string name="external_refresh">刷新索引</string>
+    <string name="external_no_messages">暂无索引邮件，请先在 Web 中连接账号。</string>
 </resources>

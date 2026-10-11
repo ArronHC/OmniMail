@@ -1,3 +1,5 @@
+import { refreshLoadedIndex } from '../../realtime/refreshLoadedIndex'
+import { useRealtimeRefresh } from '../../realtime/useRealtime'
 import {
   AlertCircle, Check, Copy, KeyRound, LoaderCircle, Mail, Paperclip,
   Plus, RefreshCw, Search, Settings2, ShieldCheck, X,
@@ -41,6 +43,8 @@ export function MicrosoftWorkspace({ enabled, remoteImagesEnabled }: {
   const [searchQuery, setSearchQuery] = useState('')
   const [messages, setMessages] = useState<MicrosoftMessageSummary[]>([])
   const [page, setPage] = useState<PageInfo>(emptyPage)
+  const loadedIndex = useRef({ messages, page })
+  useEffect(() => { loadedIndex.current = { messages, page } }, [messages, page])
   const [selected, setSelected] = useState<MicrosoftMessageSummary | null>(null)
   const [detail, setDetail] = useState<MicrosoftMessageDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -91,7 +95,8 @@ export function MicrosoftWorkspace({ enabled, remoteImagesEnabled }: {
     if (refresh) setRemoteRefreshing(true)
     setError('')
     try {
-      const result = await api.microsoftMessages({
+      const fetchPage = (cursor: string) => api.microsoftMessages({
+        cursor: cursor || undefined,
         accountId: accountId || undefined,
         folder: accountId ? folderPath : undefined,
         limit,
@@ -99,9 +104,10 @@ export function MicrosoftWorkspace({ enabled, remoteImagesEnabled }: {
         refresh,
         signal: controller.signal,
       })
+      const result = quiet && !refresh ? await refreshLoadedIndex(fetchPage, loadedIndex.current.messages, loadedIndex.current.page) : await fetchPage('')
       if (requestId !== listRequestId.current) return
       setMessages(result.messages); setPage(result.page)
-      setSelected((current) => current && result.messages.some(({ id }) => id === current.id) ? current : null)
+      setSelected((current) => current && (quiet || result.messages.some(({ id }) => id === current.id)) ? current : null)
       if (refresh) setNotice(t('已按只读模式刷新当前 Microsoft 文件夹。'))
     } catch (loadError) {
       if (!controller.signal.aborted && requestId === listRequestId.current) setError(errorMessage(loadError))
@@ -115,6 +121,8 @@ export function MicrosoftWorkspace({ enabled, remoteImagesEnabled }: {
     try { await loadAccounts(); await loadFolders(); await loadMessages(true) }
     catch (refreshError) { setError(errorMessage(refreshError)) }
   }, [loadAccounts, loadFolders, loadMessages])
+
+  useRealtimeRefresh('microsoft', accountId, refresh)
 
   useEffect(() => { void loadAccounts().catch((loadError) => setError(errorMessage(loadError))) }, [loadAccounts])
   useEffect(() => { void loadFolders() }, [loadFolders])

@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs'
 import { expect, type Page, type Route, test } from '@playwright/test'
 
 function json(route: Route, body: unknown, status = 200) {
@@ -445,4 +446,99 @@ test('aggregates two Gmail accounts and isolates scoped search and partial sync 
     '/api/gmail/accounts/gmail-2/sync',
   ])
   await expect(page.getByRole('alert')).toContainText('部分 Gmail 账号同步失败')
+})
+
+test('a realtime index event quietly displays new Gmail without manual remote sync', async ({ page }) => {
+  await preparePage(page)
+  let visible = false
+  let messageReads = 0
+  let socket: Parameters<Parameters<Page['routeWebSocket']>[1]>[0] | undefined
+  await page.routeWebSocket('**/api/realtime/updates', (ws) => { socket = ws })
+  await page.route('**://*/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (await mockAppShell(route, path, { realtimeEnabled: true })) return
+    if (path === '/api/messages') return json(route, { messages: [], counts: {}, page: { hasMore: false, nextCursor: null, limit: 30 } })
+    const account = { id: 'gmail-rt', name: 'Realtime', email: 'rt@gmail.com', status: 'active', lastSyncedAt: 1, nextSyncAt: 1, lastErrorCode: '', lastErrorAt: null, createdAt: 1, hasAppPassword: true }
+    if (path === '/api/gmail/accounts') return json(route, { enabled: true, accounts: [account] })
+    if (path === '/api/gmail/messages') {
+      messageReads++
+      return json(route, { messages: visible ? [{ id: 'rt-mail', account, senderName: 'Realtime sender', senderAddress: 'sender@example.com', recipients: [], cc: [], subject: 'Event driven arrival', preview: '', date: Date.now(), sizeBytes: 100, isRead: false, isStarred: false, hasAttachments: false }] : [], page: { hasMore: false, nextCursor: null, limit: 30 } })
+    }
+    return json(route, {})
+  })
+  await page.goto('/gmail')
+  await expect.poll(() => Boolean(socket)).toBe(true)
+  await expect.poll(() => messageReads).toBeGreaterThan(0)
+  visible = true
+  socket!.send(JSON.stringify({ type: 'indexed', provider: 'gmail', accountId: 'gmail-rt', indexedAt: Date.now() }))
+  await expect(page.getByText('Event driven arrival')).toBeVisible({ timeout: 5000 })
+  expect(messageReads).toBeGreaterThan(1)
+})
+
+test('visible Gmail tabs share one socket and both refresh from a broadcast', async ({ page, context }) => {
+  const second = await context.newPage()
+  let arrived = false
+  const sockets: Array<Parameters<Parameters<Page['routeWebSocket']>[1]>[0]> = []
+  for (const tab of [page, second]) {
+    await preparePage(tab)
+    await tab.routeWebSocket('**/api/realtime/updates', (socket) => { sockets.push(socket) })
+    await tab.route('**://*/api/**', async (route) => {
+      const path = new URL(route.request().url()).pathname
+      if (await mockAppShell(route, path, { realtimeEnabled: true })) return
+      if (path === '/api/messages') return json(route, { messages: [], counts: {}, page: { hasMore: false, nextCursor: null, limit: 30 } })
+      const account = { id: 'shared', name: 'Shared', email: 'shared@gmail.com', status: 'active', createdAt: 1, hasAppPassword: true }
+      if (path === '/api/gmail/accounts') return json(route, { accounts: [account] })
+      if (path === '/api/gmail/messages') return json(route, { messages: arrived ? [{ id: 'shared-mail', account, subject: 'Broadcast arrival', senderName: 'Sender', senderAddress: 'sender@example.com', recipients: [], cc: [], date: 1, sizeBytes: 1, isRead: false, isStarred: false, hasAttachments: false }] : [], page: { hasMore: false, nextCursor: null, limit: 30 } })
+      return json(route, {})
+    })
+    await tab.goto('/gmail')
+  }
+  await expect.poll(() => sockets.length).toBe(1)
+  arrived = true
+  sockets[0].send(JSON.stringify({ type: 'indexed', provider: 'gmail', accountId: 'shared' }))
+  await expect(page.getByText('Broadcast arrival')).toBeVisible()
+  await expect(second.getByText('Broadcast arrival')).toBeVisible()
+  expect(sockets.length).toBe(1)
+  await second.close()
+})
+
+test('records five mock Web index-signal to visible-message rounds', async ({ page }, testInfo) => {
+  await preparePage(page)
+  let subject = ''
+  let socket: Parameters<Parameters<Page['routeWebSocket']>[1]>[0] | undefined
+  await page.addInitScript(() => {
+    const observations = new Map<string, number>()
+    Object.assign(window, { realtimeProbeObservations: observations })
+    window.addEventListener('omnimail-index-update', (raw) => {
+      const event = (raw as CustomEvent<{measurementId?: string}>).detail
+      if (event.measurementId) observations.set(event.measurementId, Date.now())
+    })
+  })
+  await page.routeWebSocket('**/api/realtime/updates', (ws) => { socket = ws })
+  await page.route('**://*/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (await mockAppShell(route, path, { realtimeEnabled: true })) return
+    const account = {id:'timed',name:'Timed',email:'timed@gmail.com',status:'active',hasAppPassword:true,createdAt:1}
+    if (path === '/api/messages') return json(route, {messages:[],counts:{},page:{hasMore:false,nextCursor:null,limit:30}})
+    if (path === '/api/gmail/accounts') return json(route, {accounts:[account]})
+    if (path === '/api/gmail/messages') return json(route, {messages:subject ? [{id:subject,subject,account,senderName:'Sender',senderAddress:'sender@example.com',recipients:[],cc:[],date:1,sizeBytes:1,isRead:false,isStarred:false,hasAttachments:false}] : [],page:{hasMore:false,nextCursor:null,limit:30}})
+    return json(route,{})
+  })
+  await page.goto('/gmail')
+  await expect.poll(() => Boolean(socket)).toBe(true)
+  await expect(page.getByRole('button', {name:'添加 Gmail 账号',exact:true})).toBeVisible()
+  const rounds = []
+  for (let i=1;i<=5;i++) {
+    const id = `mock-visible-${i}`; subject = `Unique mock arrival ${i}`
+    const indexedAt = Date.now()
+    socket!.send(JSON.stringify({type:'indexed',provider:'gmail',accountId:'timed',measurementId:id,indexedAt}))
+    await expect(page.getByText(subject,{exact:true})).toBeVisible({timeout:5000})
+    const visibleAt = Date.now()
+    const clientDiscoveredAt = await page.evaluate((id) => (window as unknown as {realtimeProbeObservations:Map<string,number>}).realtimeProbeObservations.get(id),id)
+    rounds.push({id,source:'mock',segment:'web',indexedAt,clientDiscoveredAt,visibleAt,signalToVisibleMs:visibleAt-indexedAt})
+  }
+  const output = testInfo.outputPath('mock-web-latency.json')
+  writeFileSync(output,JSON.stringify(rounds,null,2))
+  await testInfo.attach('mock-web-latency.json',{path:output,contentType:'application/json'})
+  expect(rounds.every((r) => r.signalToVisibleMs<5000)).toBe(true)
 })

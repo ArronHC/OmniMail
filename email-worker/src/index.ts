@@ -5,6 +5,10 @@ import type { Env, MailQueueJob, NotificationQueueJob } from './app/types'
 import { D1QuotaError, d1QuotaResponse, quotaEnvironment, quotaQueueDelay } from './platform/d1/quota-guard'
 import { ensureSchema } from './platform/d1/schema'
 import { consumeNotificationQueue, enqueuePendingNotifications, purgeOldNotifications } from './features/telegram/telegram-delivery'
+import { realtimeServiceApi } from './features/realtime/service-api'
+import { recoverRealtimeJobs } from './features/realtime/jobs'
+import { restoreOfflineCompensation } from './features/realtime/compensation'
+export { RealtimeUpdates } from './features/realtime/updates'
 
 export { OmniMailBackupWorkflow } from './features/backups/backup'
 export { OmniMailCleanupWorkflow } from './platform/scheduling/cleanup-workflow'
@@ -13,6 +17,12 @@ async function fetchRequest(request: Request, env: Env, context: ExecutionContex
   const path = new URL(request.url).pathname
   if (path !== '/api' && !path.startsWith('/api/')) return env.ASSETS.fetch(request)
   const guarded = quotaEnvironment(env)
+  if (path.startsWith('/api/internal/realtime/')) {
+    const started = Date.now()
+    const response = await realtimeServiceApi(request, guarded, context)
+    console.info(JSON.stringify({ event: 'realtime_request', path, status: response.status, durationMs: Date.now()-started }))
+    return response
+  }
   const response = await fetchApi(request, guarded, context)
   const quota = response.status >= 500 ? d1QuotaResponse(guarded.DB) : undefined
   if (!quota) return response
@@ -45,7 +55,9 @@ export default {
   scheduled: async (_controller, env) => {
     const guarded = quotaEnvironment(env)
     try {
+      await restoreOfflineCompensation(guarded, Math.floor(Date.now() / 1000))
       await cleanup(guarded)
+      await recoverRealtimeJobs(guarded)
       await enqueuePendingNotifications(guarded)
       await purgeOldNotifications(guarded.DB)
     }

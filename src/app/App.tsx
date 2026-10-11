@@ -1,3 +1,4 @@
+import { useRealtimeConnection } from '../features/realtime/useRealtime'
 import { AlertCircle, Check, LoaderCircle, Search, Sparkles, X } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { ConnectionError, PageLoader, PublicLanding, SetupPage } from '../features/auth/components/AuthPages'
@@ -64,6 +65,7 @@ function Mailbox({
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [availableVersion, setAvailableVersion] = useState('')
+  useRealtimeConnection(Boolean(config.realtimeEnabled), user.id)
   const mailListScroll = useMailListScroll()
   const draftEditor = useDraftEditor()
   const [deploymentWizardOpen, setDeploymentWizardOpen] = useState(() => deploymentGuideUnseen(user))

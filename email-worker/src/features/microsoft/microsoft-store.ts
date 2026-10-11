@@ -280,6 +280,10 @@ export class MicrosoftAccountStore {
     if (!result.meta.changes) {
       throw new MicrosoftStoreError(404, 'account_not_found', 'Microsoft OAuth2 账号不存在。')
     }
+    if (this.env.REALTIME_ENABLED === 'true') {
+      await this.env.DB.prepare("UPDATE realtime_subscriptions SET generation = generation + 1 WHERE provider = 'microsoft' AND account_id = ? AND user_id = ?")
+        .bind(account.id, this.userId).run()
+    }
   }
 
   async replacePassword(accountId: string, password: string, now: number): Promise<void> {

@@ -1,3 +1,5 @@
+import { refreshLoadedIndex } from '../../realtime/refreshLoadedIndex'
+import { useRealtimeRefresh } from '../../realtime/useRealtime'
 import {
   AlertCircle,
   AtSign,
@@ -60,6 +62,8 @@ export function GmailWorkspace({ enabled, remoteImagesEnabled }: {
   const [searchQuery, setSearchQuery] = useState('')
   const [messages, setMessages] = useState<GmailMessageSummary[]>([])
   const [page, setPage] = useState<PageInfo>(emptyPage)
+  const loadedIndex = useRef({ messages, page })
+  useEffect(() => { loadedIndex.current = { messages, page } }, [messages, page])
   const [selected, setSelected] = useState<GmailMessageSummary | null>(null)
   const [detail, setDetail] = useState<GmailMessageDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -101,11 +105,12 @@ export function GmailWorkspace({ enabled, remoteImagesEnabled }: {
     if (!quiet) setLoading(true)
     setError('')
     try {
-      const result = await api.gmailMessages(accountId, '', searchQuery, controller.signal)
+      const fetchPage = (cursor: string) => api.gmailMessages(accountId, cursor, searchQuery, controller.signal)
+      const result = quiet ? await refreshLoadedIndex(fetchPage, loadedIndex.current.messages, loadedIndex.current.page) : await fetchPage('')
       if (current !== listRequestId.current) return
       setMessages(result.messages)
       setPage(result.page)
-      setSelected((current) => current && result.messages.some(({ id }) => id === current.id)
+      setSelected((current) => current && (quiet || result.messages.some(({ id }) => id === current.id))
         ? current : null)
     } catch (loadError) {
       if (current === listRequestId.current) setError(errorMessage(loadError))
@@ -123,6 +128,8 @@ export function GmailWorkspace({ enabled, remoteImagesEnabled }: {
       setError(errorMessage(refreshError))
     }
   }, [loadAccounts, loadMessages])
+
+  useRealtimeRefresh('gmail', accountId, refresh)
 
   useEffect(() => { void loadAccounts() }, [loadAccounts])
   useEffect(() => { void loadMessages() }, [loadMessages])
