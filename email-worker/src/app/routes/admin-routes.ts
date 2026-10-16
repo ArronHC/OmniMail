@@ -4,6 +4,8 @@ import { getMailCredentialMigration, postMailCredentialMigration } from '../../f
 import { configuredSuperAdminEmail } from '../super-admin'
 import { listAuditLogs } from '../../features/admin/audit/audit-log-api'
 import { createDomain, deleteDomain, listDomains, updateDomain } from '../../features/admin/domains/domain-api'
+import { domainMailboxes } from '../../features/admin/domains/domain-mailbox-api'
+import { previewDomainCleanup, submitDomainCleanup, domainCleanupStatus, retryDomainCleanup } from '../../features/admin/domains/domain-cleanup-api'
 import { previewAdminMailCleanup, runAdminMailCleanup } from '../../features/admin/mail/admin-mail-cleanup'
 import { mailStatistics } from '../../features/admin/mail/statistics-api'
 import { startManualBackup, storagePolicy, updateStoragePolicy } from '../../features/admin/settings/storage-policy'
@@ -97,5 +99,10 @@ app.patch('/api/admin/users/:id', (context) => updateManagedUser(
 app.get('/api/domains', (context) => listDomains(context.env, context.get('user')))
 app.post('/api/admin/domains', (context) => createDomain(context.env, context.get('user'), context.req.raw, clientIp(context.req.raw.headers)))
 app.patch('/api/admin/domains/:name', (context) => updateDomain(context.env, context.get('user'), context.req.param('name'), context.req.raw, clientIp(context.req.raw.headers)))
-app.delete('/api/admin/domains/:name', (context) => deleteDomain(context.env, context.get('user'), context.req.param('name'), clientIp(context.req.raw.headers)))
+app.delete('/api/admin/domains/:name', (context) => deleteDomain(context.env, context.get('user'), context.req.param('name'), clientIp(context.req.raw.headers), context.req.query('mode') ?? null))
+app.get('/api/admin/domains/:name/mailboxes', (c) => domainMailboxes(c.env, c.get('user'), c.req.param('name'), c.req.raw))
+app.post('/api/admin/domains/:name/cleanup/preview', (c) => previewDomainCleanup(c.env, c.get('user'), c.req.param('name'), c.req.raw))
+app.post('/api/admin/domains/:name/cleanup', (c) => submitDomainCleanup(c.env, c.get('user'), c.req.param('name'), c.req.raw, clientIp(c.req.raw.headers)))
+app.get('/api/admin/domain-cleanup-jobs/:id', (c) => domainCleanupStatus(c.env, c.get('user'), c.req.param('id')))
+app.post('/api/admin/domain-cleanup-jobs/:id/retry', (c) => retryDomainCleanup(c.env, c.get('user'), c.req.param('id'), clientIp(c.req.raw.headers)))
 }

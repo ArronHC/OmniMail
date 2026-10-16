@@ -1,11 +1,8 @@
 import {
   AlertCircle,
-  AlertTriangle,
   CheckCircle2,
   Globe2,
-  Link2,
   LoaderCircle,
-  Mail,
   PauseCircle,
   PlayCircle,
   Plus,
@@ -15,6 +12,8 @@ import {
 import { type FormEvent, useEffect, useState } from 'react'
 import { api, type ManagedDomain } from '../../../shared/api'
 import { t } from '../../../shared/i18n'
+import { DomainMailboxPanel } from './DomainMailboxPanel'
+import { DangerConfirmDialog } from '../../../shared/ui/dialogs/DangerConfirmDialog'
 
 function errorMessage(error: unknown): string {
   return t(error instanceof Error ? error.message : '域名操作失败，请重试。')
@@ -23,15 +22,18 @@ function errorMessage(error: unknown): string {
 export function DomainManagement({
   domains,
   onChanged,
+  canCleanup,
 }: {
   domains: ManagedDomain[]
   onChanged: () => Promise<void>
+  canCleanup: boolean
 }) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [pendingDelete, setPendingDelete] = useState<ManagedDomain | null>(null)
+  const [mailboxDomain, setMailboxDomain] = useState('')
 
   useEffect(() => {
     if (!error && !notice) return
@@ -72,14 +74,14 @@ export function DomainManagement({
   async function toggle(domain: ManagedDomain) {
     await run(`toggle:${domain.name}`, async () => {
       await api.updateDomain(domain.name, !domain.isActive)
-    }, t(domain.isActive ? '域名已停止创建新邮箱。' : '域名已重新启用。'))
+    }, t(domain.isActive ? '域名已停用，新收发和邮箱创建已停止。' : '域名已重新启用。'))
   }
 
   async function remove() {
     if (!pendingDelete) return
     const domain = pendingDelete
     const removed = await run(`delete:${domain.name}`, async () => {
-      await api.deleteDomain(domain.name)
+      await api.deleteDomain(domain.name, 'configuration')
     }, domain.mailboxCount > 0
       ? t('域名配置已删除，已有邮箱和邮件仍然保留。')
       : t('域名配置已删除。'))
@@ -92,7 +94,7 @@ export function DomainManagement({
         <Globe2 size={17} />
         <div>
           <h2>{t('域名管理')}</h2>
-          <p>{t('启用或停用新邮箱创建；删除配置前会展示影响范围')}</p>
+          <p>{t('管理域名收发、关联邮箱和历史数据')}</p>
         </div>
       </header>
 
@@ -122,6 +124,7 @@ export function DomainManagement({
           </button>
         </div>
       </form>
+      <p className="admin-note">{t('重新添加同名域名后，仍启用的保留邮箱可以恢复收发。')}</p>
 
       <div className="managed-domain-list">
         {domains.length ? domains.map((domain) => {
@@ -132,11 +135,13 @@ export function DomainManagement({
               <span className="managed-domain-icon"><Globe2 size={17} /></span>
               <div className="managed-domain-identity">
                 <strong>{domain.name}</strong>
-                <small>{t('{count} 个邮箱地址', { count: domain.mailboxCount })}</small>
+                <button className="domain-mailbox-link" type="button" aria-expanded={mailboxDomain === domain.name} onClick={() => setMailboxDomain(mailboxDomain === domain.name ? '' : domain.name)}>
+                  {t('{count} 个邮箱地址', { count: domain.mailboxCount })} · {t('查看关联邮箱')}
+                </button>
               </div>
               <span className={`domain-state ${domain.isActive ? 'is-active' : ''}`}>
                 <span aria-hidden="true" />
-                {t(domain.isActive ? '允许创建' : '已停用')}
+                {t(domain.isActive ? '已启用' : '已停用')}
               </span>
               <button
                 className="button button--secondary button--small"
@@ -159,12 +164,15 @@ export function DomainManagement({
                 {deleting
                   ? <LoaderCircle className="spin" size={14} />
                   : <Trash2 size={14} />}
-                {t('删除')}
+                {t('移除配置')}
               </button>
             </div>
           )
         }) : <p className="admin-empty">{t('还没有配置可创建邮箱的域名。')}</p>}
       </div>
+
+      {mailboxDomain && <DomainMailboxPanel key={mailboxDomain} domain={mailboxDomain} canCleanup={canCleanup}
+        onChanged={onChanged} onClose={() => setMailboxDomain('')} />}
 
       <p className="admin-note domain-routing-note">
         {t('添加域名后，仍需要在 Cloudflare Email Routing 中启用该域名，并将 Catch-all 规则指向 OmniMail Worker。')}
@@ -186,39 +194,19 @@ export function DomainManagement({
         </button>
       )}
 
-      {pendingDelete && (
-        <div className="domain-delete-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !busy) setPendingDelete(null)
-        }}>
-          <section className="domain-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="domain-delete-title">
-            <header>
-              <span><AlertTriangle size={22} /></span>
-              <div>
-                <p className="eyebrow">DELETE DOMAIN</p>
-                <h3 id="domain-delete-title">{t('删除 {domain}？', { domain: pendingDelete.name })}</h3>
-              </div>
-              <button className="icon-button icon-button--small" type="button" disabled={Boolean(busy)} onClick={() => setPendingDelete(null)} aria-label={t('关闭')}>
-                <X size={16} />
-              </button>
-            </header>
-            <p className="domain-delete-lead">{t('请先确认删除后的影响。这个操作只删除 OmniMail 中的域名管理配置。')}</p>
-            <div className="domain-delete-risks">
-              <p><Mail size={17} /><span><strong>{t('{count} 个已有邮箱会保留', { count: pendingDelete.mailboxCount })}</strong><small>{t('邮箱地址、历史邮件和附件不会被删除，并且仍可继续查看。')}</small></span></p>
-              <p><Link2 size={17} /><span><strong>{t('相关邀请链接会失效')}</strong><small>{t('使用该域名且尚未注册的邀请将无法继续使用。')}</small></span></p>
-              <p><Globe2 size={17} /><span><strong>{t('不会修改 Cloudflare DNS')}</strong><small>{t('Email Routing、MX 和其他 DNS 记录需要在 Cloudflare 中单独管理。')}</small></span></p>
-            </div>
-            <footer>
-              <button className="button button--secondary" type="button" disabled={Boolean(busy)} onClick={() => setPendingDelete(null)}>{t('取消')}</button>
-              <button className="button domain-delete-confirm" type="button" disabled={Boolean(busy)} onClick={() => void remove()}>
-                {busy.startsWith('delete:')
-                  ? <LoaderCircle className="spin" size={16} />
-                  : <Trash2 size={16} />}
-                {t('确认删除域名')}
-              </button>
-            </footer>
-          </section>
-        </div>
-      )}
+      {pendingDelete && <DangerConfirmDialog
+        icon={Trash2}
+        eyebrow={t('域名管理')}
+        title={t('移除 {domain} 的配置？', { domain: pendingDelete.name })}
+        description={t('保留 {count} 个邮箱及其历史邮件、草稿和附件；停止该域名的新收发与邮箱创建，相关邀请失效。Cloudflare DNS 和 Email Routing 需单独管理。', { count: pendingDelete.mailboxCount })}
+        impactTitle={t('保留历史数据')}
+        impactDescription={t('重新添加同名域名后，仍启用的邮箱可以恢复使用。')}
+        confirmLabel={t('移除域名配置')}
+        busy={Boolean(busy)}
+        error={error}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void remove()}
+      />}
     </section>
   )
 }

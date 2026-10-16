@@ -1,7 +1,7 @@
 import PostalMime from 'postal-mime'
 import { archiveIncomingMessage } from '../../features/messages/mail-archive'
 import { indexStoredMessage, messageSearchStatement } from '../../shared/mail/message-search'
-import { releaseStorage, reserveStorage } from '../../features/messages/message-storage'
+import { deleteStagedObjects, releaseStorage, reserveStorage } from '../../features/messages/message-storage'
 import {
   deliverOutboundMessage,
   OutboundDeliveryError,
@@ -240,8 +240,9 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env): 
 
 export async function parseMessage(job: ParseJob, env: Env): Promise<void> {
   const record = await env.DB.prepare(
-    'SELECT * FROM messages WHERE id = ?',
-  ).bind(job.messageId).first<MessageRow>()
+    `SELECT m.*, mb.cleanup_job_id FROM messages m JOIN mailboxes mb ON mb.address = m.mailbox_address WHERE m.id = ?`,
+  ).bind(job.messageId).first<MessageRow & { cleanup_job_id?: string }>()
+  if (record?.cleanup_job_id) return
   if (!record || record.status === 'ready' || record.status === 'sent') return
   if (!record.raw_key) throw new Error('Raw message key is missing')
 
@@ -354,12 +355,12 @@ export async function parseMessage(job: ParseJob, env: Env): Promise<void> {
     await env.DB.batch(attachmentStatements)
   } catch (error) {
     if (writtenKeys.length) {
-      try {
-        await env.MAIL_BUCKET.delete(writtenKeys)
-      } catch (cleanupError) {
-        console.error('Unable to remove objects from failed message parse', cleanupError)
-      }
+      // 与清理并发时，解析器可能已写入对象但事务被拒绝；必须留下持久化补偿。
+      await env.DB.prepare(`INSERT OR IGNORE INTO pending_object_deletions (object_key) SELECT value FROM json_each(?)`)
+        .bind(JSON.stringify(writtenKeys)).run()
+      await deleteStagedObjects(env, writtenKeys)
     }
+    if (error instanceof Error && error.message.includes('mailbox_cleanup_in_progress')) return
     throw error
   }
 }

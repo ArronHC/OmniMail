@@ -2,6 +2,7 @@ import { isD1QuotaError } from '../d1/quota-guard'
 import { expireTemporaryAccounts } from '../../features/auth/account/account-api'
 import { purgeUserDraft } from '../../features/drafts/draft-api'
 import { permanentlyDeleteMessage, purgePendingObjectDeletions } from '../../features/messages/message-storage'
+import { recoverDomainCleanupDispatch } from '../../features/admin/domains/domain-cleanup-store'
 import { enqueueMissingMessageSearch } from '../../shared/mail/message-search'
 import { ensureSchema } from '../d1/schema'
 import { enqueueDueGmailSyncs } from '../../features/gmail/gmail-sync'
@@ -123,6 +124,7 @@ export async function purgeDeletedAccountBatch(env: Env, cutoff: number): Promis
   const user = await env.DB.prepare(
     `SELECT id FROM users
       WHERE role IN ('user', 'temporary') AND deleted_at IS NOT NULL AND deleted_at <= ?
+        AND NOT EXISTS (SELECT 1 FROM mailboxes mb WHERE mb.user_id = users.id AND mb.cleanup_job_id IS NOT NULL)
       ORDER BY deleted_at, id
       LIMIT 1`,
   ).bind(cutoff).first<{ id: string }>()
@@ -248,6 +250,7 @@ export async function cleanup(env: Env): Promise<void> {
     console.error('Unable to enqueue Linux DO Mail synchronization', error)
   }
   await purgePendingObjectDeletions(env)
+  await recoverDomainCleanupDispatch(env)
   await startScheduledBackup(env, now)
   await startRetentionCleanup(env, now)
 }

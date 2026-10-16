@@ -2,7 +2,7 @@
 
 # OmniMail 完整 HTTP API 参考
 
-当前 Worker 共公开 **173** 个 HTTP 端点。本文档由代码中的 API Catalog 自动生成，
+当前 Worker 共公开 **178** 个 HTTP 端点。本文档由代码中的 API Catalog 自动生成，
 与 Webmail `/settings/api` 使用同一份数据源。架构、安全模型、限速和数据生命周期说明见
 [`docs/API.md`](../API.md)。
 
@@ -33,8 +33,8 @@ Webhook 端点按文档示例提交 Svix 签名头。除公开端点外，服务
 
 | 方法 | 数量 |
 | --- | ---: |
-| `GET` | 66 |
-| `POST` | 55 |
+| `GET` | 68 |
+| `POST` | 58 |
 | `DELETE` | 17 |
 | `PATCH` | 26 |
 | `PUT` | 9 |
@@ -56,7 +56,7 @@ Webhook 端点按文档示例提交 Svix 签名头。除公开端点外，服务
 | [Yandex 邮箱](yandex-mail.md) | 10 | Mail 应用密码认证、有限 INBOX 索引、按需正文、附件与精确已读。 |
 | [Linux DO 邮箱](linux-do-mail.md) | 10 | 加密连接 Linux DO Mail，按需读取 INBOX 并通过官方 SMTP 发件。 |
 | [管理员：运营与邮件](admin-operations.md) | 12 | 统计、审计、失败邮件、全站邮件和安全清理。 |
-| [管理员：用户与访问](admin-access.md) | 11 | 邀请、用户、用户限速和收件域名管理。 |
+| [管理员：用户与访问](admin-access.md) | 16 | 邀请、用户、用户限速和收件域名管理。 |
 | [管理员：设置、备份与版本](admin-settings.md) | 19 | 全局策略、存储、备份浏览和系统更新。 |
 
 ## 通用约定

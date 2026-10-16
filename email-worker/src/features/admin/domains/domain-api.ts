@@ -31,7 +31,7 @@ export function validDomainName(value: string): boolean {
   ))
 }
 
-function pathDomain(encoded: string): string {
+export function pathDomain(encoded: string): string {
   try {
     return normalizeDomain(decodeURIComponent(encoded))
   } catch {
@@ -96,7 +96,7 @@ export async function createDomain(
   if (!isAdministrator(user)) return json({ error: '只有管理员可以添加域名。' }, 403)
   const body = await request.json<{ name?: string }>()
     .catch(() => ({} as { name?: string }))
-  const name = normalizeDomain(body.name || '')
+  const name = normalizeDomain(typeof body?.name === 'string' ? body.name : '')
   if (!validDomainName(name)) return json({ error: '请输入有效的域名。' }, 400)
 
   try {
@@ -104,7 +104,10 @@ export async function createDomain(
       `INSERT INTO domains (name, is_active, created_by)
        VALUES (?, 1, ?)`,
     ).bind(name, user.id).run()
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('domain_cleanup_in_progress')) {
+      return json({ error: '该域名正在清理，请等待任务完成。' }, 409)
+    }
     return json({ error: '这个域名已经存在。' }, 409)
   }
   await audit(env, user.id, 'domain.create', name, ip)
@@ -124,7 +127,8 @@ export async function updateDomain(
   const body = await request.json<{ isActive?: boolean }>()
     .catch(() => ({} as { isActive?: boolean }))
   if (!validDomainName(name)) return json({ error: '域名格式无效。' }, 400)
-  if (typeof body.isActive !== 'boolean') return json({ error: '缺少域名状态。' }, 400)
+  if (typeof body?.isActive !== 'boolean') return json({ error: '缺少域名状态。' }, 400)
+  if (await activeDomainCleanup(env, name)) return json({ error: '该域名正在清理，请等待任务完成。' }, 409)
 
   const result = await env.DB.prepare(
     `UPDATE domains
@@ -142,24 +146,45 @@ export async function deleteDomain(
   user: SessionUser,
   encodedName: string,
   ip: string,
+  mode: string | null = null,
 ): Promise<Response> {
   if (!isAdministrator(user)) return json({ error: '只有管理员可以删除域名。' }, 403)
   const name = pathDomain(encodedName)
   if (!validDomainName(name)) return json({ error: '域名格式无效。' }, 400)
+  if (mode !== null && mode !== 'configuration') return json({ error: '域名删除模式无效。' }, 400)
   const existing = await domainRow(env, name)
   if (!existing) return json({ error: '域名不存在。' }, 404)
-  if (existing.mailbox_count > 0) {
+  if (mode !== 'configuration' && existing.mailbox_count > 0) {
     return json({ error: '该域名仍有关联邮箱，请先删除这些邮箱。' }, 409)
   }
 
-  await env.DB.batch([
+  if (await activeDomainCleanup(env, name)) return json({ error: '该域名正在清理，请等待任务完成。' }, 409)
+  const allowed = `(? = 'configuration' OR NOT EXISTS (
+    SELECT 1 FROM mailboxes WHERE LOWER(SUBSTR(address, INSTR(address, '@') + 1)) = ?
+  ))`
+  let results: D1Result[]
+  try { results = await env.DB.batch([
     env.DB.prepare(
-      'DELETE FROM temporary_invites WHERE domain_name = ?',
-    ).bind(name),
+      `DELETE FROM temporary_invites WHERE domain_name = ? AND ${allowed}`,
+    ).bind(name, mode || 'empty', name),
     env.DB.prepare(
-      'DELETE FROM domains WHERE name = ?',
-    ).bind(name),
-  ])
-  await audit(env, user.id, 'domain.delete', name, ip)
+      `DELETE FROM domains WHERE name = ? AND ${allowed}`,
+    ).bind(name, mode || 'empty', name),
+    env.DB.prepare(
+      `INSERT INTO audit_logs (user_id, action, target_id, ip, detail_json)
+       SELECT ?, 'domain.delete', ?, ?, ? WHERE ${allowed}`,
+    ).bind(user.id, name, ip, JSON.stringify({ mode: mode || 'empty', retainedMailboxes: existing.mailbox_count }), mode || 'empty', name),
+  ]) } catch (error) {
+    if (error instanceof Error && error.message.includes('domain_cleanup_in_progress')) return json({ error: '该域名正在清理，请等待任务完成。' }, 409)
+    throw error
+  }
+  if (!results[1].meta.changes) return json({ error: '域名或关联邮箱已变化，请刷新后重试。' }, 409)
   return json({ ok: true })
+}
+
+export async function activeDomainCleanup(env: Env, name: string): Promise<boolean> {
+  const job = await env.DB.prepare(
+    `SELECT id FROM domain_cleanup_jobs WHERE domain_name = ? AND status NOT IN ('preview', 'completed') LIMIT 1`,
+  ).bind(name).first()
+  return Boolean(job)
 }

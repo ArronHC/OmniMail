@@ -74,9 +74,42 @@ export const adminAccessEndpoints: ApiEndpoint[] = [
   },
   {
     method: 'DELETE', path: '/api/admin/domains/:name', group: 'adminAccess', auth: 'admin',
-    title: l('删除空域名', 'Delete an empty domain'),
-    description: l('删除没有邮箱地址的托管域名。', 'Delete a managed domain that has no mailbox addresses.'),
-    request: 'Path · name', response: '200 · { ok: true }',
+    title: l('移除域名配置', 'Remove domain configuration'),
+    description: l('默认仅删除空域名；显式 mode=configuration 保留关联邮箱与历史数据，但停止新收发、创建与邀请注册。', 'The default only removes empty domains. Explicit mode=configuration retains mailbox history while stopping new mail flow, creation and invitation registration.'),
+    request: 'Path · name; Query · mode=configuration?', response: '200 · { ok: true }',
+    examplePath: '/api/admin/domains/example.com?mode=configuration',
+  },
+  {
+    method: 'GET', path: '/api/admin/domains/:name/mailboxes', group: 'adminAccess', auth: 'admin',
+    title: l('查看域名关联邮箱', 'List associated mailboxes'),
+    description: l('按精确域名分页查看所有用户的关联邮箱、主邮箱和清理状态。', 'Paginate associated mailboxes across users, including primary and cleanup states, for an exact domain.'),
+    request: 'Path · name; Query · limit?, cursor?', response: '200 · { mailboxes, totals, page, activeJob }',
+  },
+  {
+    method: 'POST', path: '/api/admin/domains/:name/cleanup/preview', group: 'adminAccess', auth: 'superAdmin',
+    title: l('预览关联邮箱清理', 'Preview mailbox cleanup'),
+    description: l('预览选中邮箱或全域关联邮箱清理，主邮箱和既有清理任务会阻止提交；预览有效期十分钟。', 'Preview selected or all associated mailboxes. Primary mailboxes and existing cleanup tasks block submission; previews expire after ten minutes.'),
+    request: 'Path · name; JSON · mode=selected|all_and_remove, addresses? (最多 100 个)', response: '200 · { jobId, expiresAt, summary }',
+    exampleBody: { mode: 'selected', addresses: ['alias@example.com'] },
+  },
+  {
+    method: 'POST', path: '/api/admin/domains/:name/cleanup', group: 'adminAccess', auth: 'superAdmin',
+    title: l('提交关联邮箱清理', 'Submit mailbox cleanup'),
+    description: l('凭当前操作者的预览与完整域名确认提交后台任务；重复使用同一 jobId 不扩大范围。', 'Submit a background task using the current actor’s preview and full-domain confirmation. Repeating a jobId does not expand its scope.'),
+    request: 'Path · name; JSON · jobId, confirmDomain', response: '202 · { jobId, status }',
+    exampleBody: { jobId: '00000000-0000-4000-8000-000000000000', confirmDomain: 'example.com' },
+  },
+  {
+    method: 'GET', path: '/api/admin/domain-cleanup-jobs/:id', group: 'adminAccess', auth: 'superAdmin',
+    title: l('读取清理进度', 'Read cleanup progress'),
+    description: l('查询持久化任务的汇总进度、未完成对象数和脱敏错误提示。', 'Read persisted task progress, pending object counts and sanitized errors.'),
+    request: 'Path · id', response: '200 · { job }',
+  },
+  {
+    method: 'POST', path: '/api/admin/domain-cleanup-jobs/:id/retry', group: 'adminAccess', auth: 'superAdmin',
+    title: l('重试清理任务', 'Retry cleanup task'),
+    description: l('继续同一任务尚未完成的目标与对象；已删除的数据不会恢复。', 'Continue unfinished targets and objects of the same task. Deleted data cannot be restored.'),
+    request: 'Path · id', response: '202 · { jobId, status }',
   },
 ]
 

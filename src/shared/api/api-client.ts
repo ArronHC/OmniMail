@@ -1,4 +1,5 @@
 import { t } from '../i18n'
+import { createDomainManagementApi } from '../../features/admin/domains/domain-api-client'
 import { recordServiceBackoff, serviceBackoff, serviceBackoffMessage, type ServiceBackoff } from './service-backoff'
 import type {
   AdminMessageAction,
@@ -414,8 +415,9 @@ export const api = {
       body: jsonBody({ isActive }),
     })
   ),
-  deleteDomain: (name: string) => request<{ ok: true }>(
-    `/api/admin/domains/${encodeURIComponent(name)}`,
+  ...createDomainManagementApi(request, jsonBody),
+  deleteDomain: (name: string, mode?: 'configuration') => request<{ ok: true }>(
+    `/api/admin/domains/${encodeURIComponent(name)}${mode ? '?mode=configuration' : ''}`,
     { method: 'DELETE' },
   ),
   temporaryInvites: (cursor?: string) => {
