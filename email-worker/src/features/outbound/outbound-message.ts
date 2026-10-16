@@ -368,7 +368,7 @@ export async function deliverOutboundMessage(env: Env, job: OutboundJob): Promis
   const record = await env.DB.prepare(
     `SELECT id, status, mailbox_address, sender_name, recipients_json, subject,
             body_key, in_reply_to, references_header, client_request_id,
-            mb.is_hidden AS mailbox_is_hidden,
+            mb.is_hidden AS mailbox_is_hidden, mb.cleanup_job_id,
             EXISTS (
               SELECT 1 FROM linux_do_mail_accounts la
                WHERE la.username = messages.mailbox_address AND la.user_id = mb.user_id
@@ -387,7 +387,8 @@ export async function deliverOutboundMessage(env: Env, job: OutboundJob): Promis
        FROM messages
        JOIN mailboxes mb ON mb.address = messages.mailbox_address
        WHERE id = ? AND direction = 'outgoing'`,
-  ).bind(job.messageId).first<OutboundRecord>()
+  ).bind(job.messageId).first<OutboundRecord & { cleanup_job_id?: string }>()
+  if (record?.cleanup_job_id) return
   if (!record || record.status === 'sent') return
   const isLinuxDoMail = Boolean(record.mailbox_is_hidden && record.linux_do_mail_account)
   const isQqMail = Boolean(record.mailbox_is_hidden && record.qq_mail_account)

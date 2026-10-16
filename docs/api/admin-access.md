@@ -8,7 +8,7 @@
 
 > Invitations, users, user rate limits, and receiving-domain management.
 
-本分类共 **11** 个端点。返回 [完整 API 索引](README.md) 或 [API 架构与安全说明](../API.md)。
+本分类共 **16** 个端点。返回 [完整 API 索引](README.md) 或 [API 架构与安全说明](../API.md)。
 
 <!-- endpoint:GET /api/admin/invites catalog:208df68a46d2 -->
 ## `GET /api/admin/invites`
@@ -286,25 +286,152 @@ curl --request PATCH \
 }'
 ```
 
-<!-- endpoint:DELETE /api/admin/domains/:name catalog:601febfba9b0 -->
+<!-- endpoint:DELETE /api/admin/domains/:name catalog:af479b857e9f -->
 ## `DELETE /api/admin/domains/{name}`
 
-**删除空域名 / Delete an empty domain**
+**移除域名配置 / Remove domain configuration**
 
-删除没有邮箱地址的托管域名。
+默认仅删除空域名；显式 mode=configuration 保留关联邮箱与历史数据，但停止新收发、创建与邀请注册。
 
-> Delete a managed domain that has no mailbox addresses.
+> The default only removes empty domains. Explicit mode=configuration retains mailbox history while stopping new mail flow, creation and invitation registration.
 
 | 项目 | 内容 |
 | --- | --- |
 | 认证 | 管理员或主管理员 |
-| 请求 | Path · name |
+| 请求 | Path · name; Query · mode=configuration? |
 | 成功响应 | 200 · { ok: true } |
 
 ### cURL 示例
 
 ```bash
 curl --request DELETE \
-  --url "https://mail.example.com/api/admin/domains/example.com" \
+  --url "https://mail.example.com/api/admin/domains/example.com?mode=configuration" \
   --header "Authorization: Bearer om_at_admin..."
+```
+
+<!-- endpoint:GET /api/admin/domains/:name/mailboxes catalog:ea931c73478a -->
+## `GET /api/admin/domains/{name}/mailboxes`
+
+**查看域名关联邮箱 / List associated mailboxes**
+
+按精确域名分页查看所有用户的关联邮箱、主邮箱和清理状态。
+
+> Paginate associated mailboxes across users, including primary and cleanup states, for an exact domain.
+
+| 项目 | 内容 |
+| --- | --- |
+| 认证 | 管理员或主管理员 |
+| 请求 | Path · name; Query · limit?, cursor? |
+| 成功响应 | 200 · { mailboxes, totals, page, activeJob } |
+
+### cURL 示例
+
+```bash
+curl --request GET \
+  --url "https://mail.example.com/api/admin/domains/example.com/mailboxes" \
+  --header "Authorization: Bearer om_at_admin..."
+```
+
+<!-- endpoint:POST /api/admin/domains/:name/cleanup/preview catalog:c4c199cf6f39 -->
+## `POST /api/admin/domains/{name}/cleanup/preview`
+
+**预览关联邮箱清理 / Preview mailbox cleanup**
+
+预览选中邮箱或全域关联邮箱清理，主邮箱和既有清理任务会阻止提交；预览有效期十分钟。
+
+> Preview selected or all associated mailboxes. Primary mailboxes and existing cleanup tasks block submission; previews expire after ten minutes.
+
+| 项目 | 内容 |
+| --- | --- |
+| 认证 | 仅主管理员 |
+| 请求 | Path · name; JSON · mode=selected\|all_and_remove, addresses? (最多 100 个) |
+| 成功响应 | 200 · { jobId, expiresAt, summary } |
+
+### cURL 示例
+
+```bash
+curl --request POST \
+  --url "https://mail.example.com/api/admin/domains/example.com/cleanup/preview" \
+  --header "Authorization: Bearer om_at_owner..." \
+  --header "Content-Type: application/json" \
+  --data '{
+  "mode": "selected",
+  "addresses": [
+    "alias@example.com"
+  ]
+}'
+```
+
+<!-- endpoint:POST /api/admin/domains/:name/cleanup catalog:669c6fc62e87 -->
+## `POST /api/admin/domains/{name}/cleanup`
+
+**提交关联邮箱清理 / Submit mailbox cleanup**
+
+凭当前操作者的预览与完整域名确认提交后台任务；重复使用同一 jobId 不扩大范围。
+
+> Submit a background task using the current actor’s preview and full-domain confirmation. Repeating a jobId does not expand its scope.
+
+| 项目 | 内容 |
+| --- | --- |
+| 认证 | 仅主管理员 |
+| 请求 | Path · name; JSON · jobId, confirmDomain |
+| 成功响应 | 202 · { jobId, status } |
+
+### cURL 示例
+
+```bash
+curl --request POST \
+  --url "https://mail.example.com/api/admin/domains/example.com/cleanup" \
+  --header "Authorization: Bearer om_at_owner..." \
+  --header "Content-Type: application/json" \
+  --data '{
+  "jobId": "00000000-0000-4000-8000-000000000000",
+  "confirmDomain": "example.com"
+}'
+```
+
+<!-- endpoint:GET /api/admin/domain-cleanup-jobs/:id catalog:9f4db47b3acf -->
+## `GET /api/admin/domain-cleanup-jobs/{id}`
+
+**读取清理进度 / Read cleanup progress**
+
+查询持久化任务的汇总进度、未完成对象数和脱敏错误提示。
+
+> Read persisted task progress, pending object counts and sanitized errors.
+
+| 项目 | 内容 |
+| --- | --- |
+| 认证 | 仅主管理员 |
+| 请求 | Path · id |
+| 成功响应 | 200 · { job } |
+
+### cURL 示例
+
+```bash
+curl --request GET \
+  --url "https://mail.example.com/api/admin/domain-cleanup-jobs/resource_id" \
+  --header "Authorization: Bearer om_at_owner..."
+```
+
+<!-- endpoint:POST /api/admin/domain-cleanup-jobs/:id/retry catalog:e5a8c36e9679 -->
+## `POST /api/admin/domain-cleanup-jobs/{id}/retry`
+
+**重试清理任务 / Retry cleanup task**
+
+继续同一任务尚未完成的目标与对象；已删除的数据不会恢复。
+
+> Continue unfinished targets and objects of the same task. Deleted data cannot be restored.
+
+| 项目 | 内容 |
+| --- | --- |
+| 认证 | 仅主管理员 |
+| 请求 | Path · id |
+| 成功响应 | 202 · { jobId, status } |
+
+### cURL 示例
+
+```bash
+curl --request POST \
+  --url "https://mail.example.com/api/admin/domain-cleanup-jobs/resource_id/retry" \
+  --header "Authorization: Bearer om_at_owner..."
 ```

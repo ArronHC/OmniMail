@@ -102,7 +102,7 @@ async function mailForDelivery(env: Env, row: DeliveryRow): Promise<MailRow | nu
 async function mainMailboxBody(env: Env, row: DeliveryRow): Promise<StoredBody | null> {
   const message = await env.DB.prepare(
     `SELECT m.body_key FROM messages m JOIN mailboxes mb ON mb.address=m.mailbox_address
-     WHERE mb.user_id=? AND m.id=? AND m.direction='incoming'
+     WHERE mb.user_id=? AND mb.cleanup_job_id IS NULL AND m.id=? AND m.direction='incoming'
        AND m.folder='inbox' AND m.status='ready' LIMIT 1`,
   ).bind(row.user_id, row.message_id).first<{ body_key: string | null }>()
   if (!message?.body_key) return null

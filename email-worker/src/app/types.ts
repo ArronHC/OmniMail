@@ -82,6 +82,7 @@ export interface BackupWorkflowParams {
 
 export interface CleanupWorkflowParams {
   startedAt: number
+  domainCleanup?: { jobId: string; attempt: number }
   mailboxDeletion?: {
     address: string
     userId: string

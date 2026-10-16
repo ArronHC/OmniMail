@@ -51,7 +51,7 @@
 
 | 产品层 | 当前版本 | 支持层级 | 职责与兼容关系 |
 | --- | --- | --- | --- |
-| Web + Worker API | [`1.2.0`](https://github.com/mibgb65-cloud/OmniMail/releases/tag/v1.2.0) | 稳定兼容基线 | 核心服务、Webmail、数据和所有邮箱来源；自托管实例的唯一服务端 |
+| Web + Worker API | [`1.3.0`](https://github.com/mibgb65-cloud/OmniMail/releases/tag/v1.3.0) | 稳定兼容基线 | 核心服务、Webmail、数据和所有邮箱来源；自托管实例的唯一服务端 |
 | OmniMail Float | [`1.0.2`](https://github.com/mibgb65-cloud/OmniMail/releases/tag/float-v1.0.2) | 稳定兼容基线 | Chrome Manifest V3 浏览器协作层；连接 Web/API `1.x`，不直连第三方邮箱 |
 | Android | [`0.3.0`](https://github.com/mibgb65-cloud/OmniMail/releases/tag/android-v0.3.0) | 独立预览版 | 原生移动客户端；仍处于 `0.x`，兼容承诺和发布节奏独立于 Web/Float |
 
@@ -66,6 +66,10 @@
   稳定契约；升级前应阅读对应 Android Release Notes。
 
 ### 1.x 兼容边界
+
+- Web `1.2.0 → 1.3.0` 新增域名关联邮箱列表、保留历史的配置移除和主管理员后台批量清理。
+  升级需应用 `0041` D1 迁移，复用现有 Cleanup Workflow，不新增 Secret 或服务。
+  升级与活动任务回滚限制见 [Web 1.3.0 发布说明](docs/releases/web/v1.3.0.md)。
 
 - Web `1.1.4 → 1.2.0` 新增可选 Telegram 私聊提醒、主邮箱正文转发，并修复 Linux DO 打开后同步已读。
   升级需应用 `0038–0040` D1 迁移并部署通知 Queue；Telegram Bot Secret 为可选项。

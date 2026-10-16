@@ -5,6 +5,7 @@ interface MailboxRow {
   address: string
   is_primary: number
   is_active: number
+  domain_active?: number
 }
 
 function json(body: unknown, status = 200): Response {
@@ -25,6 +26,7 @@ function mailboxJson(row: MailboxRow) {
     domain: mailboxDomain(row.address),
     isPrimary: Boolean(row.is_primary),
     isActive: Boolean(row.is_active),
+    domainActive: row.domain_active === undefined ? true : Boolean(row.domain_active),
   }
 }
 
@@ -43,7 +45,8 @@ async function auditMailbox(
 
 export async function listMailboxes(env: Env, user: SessionUser): Promise<Response> {
   const { results } = await env.DB.prepare(
-    `SELECT address, is_primary, is_active
+    `SELECT address, is_primary, is_active,
+            EXISTS (SELECT 1 FROM domains d WHERE d.name = LOWER(SUBSTR(address, INSTR(address, '@') + 1)) AND d.is_active = 1) AS domain_active
        FROM mailboxes
       WHERE user_id = ? AND is_hidden = 0
       ORDER BY is_active DESC, is_primary DESC, address`,

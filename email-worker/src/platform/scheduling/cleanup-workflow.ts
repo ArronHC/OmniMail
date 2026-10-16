@@ -17,6 +17,8 @@ import { backupIdentity, scopedBackupKey } from '../../features/backups/backup-s
 import { ensureSchema } from '../d1/schema'
 import { retentionValues } from '../../features/admin/settings/storage-policy'
 import type { CleanupWorkflowParams, Env } from '../../app/types'
+import { runDomainCleanupBatch } from '../../features/admin/domains/domain-cleanup-runner'
+import { cleanupJob, dispatchDomainCleanup } from '../../features/admin/domains/domain-cleanup-store'
 
 const MAX_BATCHES_PER_PHASE = 100
 const MAX_BACKUP_PAGES_PER_RULE = 100
@@ -27,6 +29,7 @@ export class OmniMailCleanupWorkflow extends WorkflowEntrypoint<Env, CleanupWork
     step: WorkflowStep,
   ): Promise<unknown> {
     const now = event.payload?.startedAt || Math.floor(Date.now() / 1000)
+    if (event.payload?.domainCleanup) return this.purgeDomain(step, event.payload.domainCleanup)
     if (event.payload?.mailboxDeletion) {
       return this.purgeMailbox(step, now, event.payload.mailboxDeletion)
     }
@@ -71,6 +74,30 @@ export class OmniMailCleanupWorkflow extends WorkflowEntrypoint<Env, CleanupWork
       return { pending, batchSize: CLEANUP_BATCH_SIZE }
     } catch (error) {
       await step.do('Release failed cleanup claim', () => releaseRetentionClaim(this.env.DB, now))
+      throw error
+    }
+  }
+
+  private async purgeDomain(step: WorkflowStep, task: { jobId: string; attempt: number }): Promise<unknown> {
+    try {
+      for (let index = 0; index < MAX_BATCHES_PER_PHASE; index += 1) {
+        const done = await step.do(`Domain cleanup batch ${index}`, () => runDomainCleanupBatch(this.env, task.jobId, task.attempt))
+        if (done) return { pending: false }
+      }
+      await step.do('Schedule domain continuation', async () => {
+        await this.env.DB.prepare(
+          `UPDATE domain_cleanup_jobs SET status = 'pending', attempt = attempt + 1, updated_at = unixepoch()
+           WHERE id = ? AND attempt = ? AND status NOT IN ('failed', 'completed')`,
+        ).bind(task.jobId, task.attempt).run()
+        const job = await cleanupJob(this.env, task.jobId)
+        if (job?.status === 'pending') await dispatchDomainCleanup(this.env, job)
+      })
+      return { pending: true }
+    } catch (error) {
+      await step.do('Record domain cleanup failure', async () => { await this.env.DB.prepare(
+        `UPDATE domain_cleanup_jobs SET status = 'failed', error_code = 'cleanup_failed', updated_at = unixepoch()
+         WHERE id = ? AND attempt = ? AND status != 'completed'`,
+      ).bind(task.jobId, task.attempt).run() })
       throw error
     }
   }

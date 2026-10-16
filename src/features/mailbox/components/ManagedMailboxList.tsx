@@ -105,7 +105,7 @@ export function ManagedMailboxList({
             <span className={mailbox.isActive ? 'is-active' : ''} aria-hidden="true" />
             <div className="managed-mailbox__details">
               <strong>{mailbox.address}</strong>
-              <small>{t(mailbox.isPrimary
+              <small>{t(mailbox.domainActive === false ? '域名不可用 · 历史可读' : mailbox.isPrimary
                 ? '主邮箱 · 始终启用'
                 : mailbox.isActive ? '正在接收邮件' : '已停止接收新邮件')}</small>
             </div>

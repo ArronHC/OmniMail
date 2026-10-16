@@ -13,6 +13,7 @@ export function DangerConfirmDialog({
   confirmLabel,
   confirmation,
   busy = false,
+  error,
   onCancel,
   onConfirm,
 }: {
@@ -28,8 +29,10 @@ export function DangerConfirmDialog({
     expected: string
     value: string
     onChange: (value: string) => void
+    inputMode?: 'text' | 'numeric'
   }
   busy?: boolean
+  error?: string
   onCancel: () => void
   onConfirm: () => void
 }) {
@@ -51,7 +54,7 @@ export function DangerConfirmDialog({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busyRef.current) cancelRef.current()
       if (event.key !== 'Tab') return
-      const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])')
+      const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]')
       if (!controls?.length) return
       const first = controls[0]
       const last = controls[controls.length - 1]
@@ -97,6 +100,7 @@ export function DangerConfirmDialog({
         </header>
         <div className="mail-delete-dialog__body">
           <p id={descriptionId}>{description}</p>
+          {error && <p className="inline-error" role="alert">{error}</p>}
           <p className="mail-delete-impact">
             <TriangleAlert size={17} />
             <span><strong>{impactTitle}</strong><small>{impactDescription}</small></span>
@@ -106,7 +110,7 @@ export function DangerConfirmDialog({
               <span>{confirmation.label}</span>
               <input
                 data-autofocus
-                inputMode="numeric"
+                inputMode={confirmation.inputMode || 'numeric'}
                 value={confirmation.value}
                 onChange={(event) => confirmation.onChange(event.target.value)}
               />
