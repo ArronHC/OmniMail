@@ -183,7 +183,7 @@ export function AdminWorkspace({
       />
 
       <div className="admin-detail-grid">
-        <DomainManagement domains={domains} onChanged={onDomainsChanged} />
+        <DomainManagement domains={domains} onChanged={onDomainsChanged} canCleanup={user.role === 'super_admin'} />
 
         <StoragePolicySettings canBrowseBackups={user.role === 'super_admin'} />
 

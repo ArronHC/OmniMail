@@ -1,5 +1,6 @@
 import { enRealtime } from './realtime'
 import { enAdmin } from './admin'
+import { enDomains } from './domains'
 import { enMailCredentials } from './mail-credentials'
 import { enAdminMail } from './admin-mail'
 import { enApi } from './api'
@@ -26,6 +27,7 @@ export const englishTranslations: Record<string, string> = {
   ...enRealtime,
   ...enMailCredentials,
   ...enAdmin,
+  ...enDomains,
   ...enAdminMail,
   ...enInvites,
   ...enErrors,

@@ -155,7 +155,7 @@ describe('mail helpers', () => {
         bind() {
           return this
         },
-        first: async () => sql.includes('SELECT * FROM messages')
+        first: async () => sql.includes('SELECT m.*')
           ? { status: 'queued', raw_key: null }
           : null,
         run: async () => ({ success: true }),
@@ -244,7 +244,8 @@ describe('mail helpers', () => {
           bind() {
             return statement
           },
-          first: async () => sql.includes('SELECT * FROM messages')
+          run: async () => ({ meta: { changes: 1 } }),
+          first: async () => sql.includes('SELECT m.*')
             ? {
                 id: 'message-1',
                 status: 'processing',

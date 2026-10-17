@@ -11,7 +11,7 @@ export const MESSAGE_SELECTS: Record<NotificationSource, string> = {
     m.sender_name, m.sender_address, m.subject, COALESCE(m.received_at, m.created_at) AS message_date,
     m.is_read
     FROM messages m JOIN mailboxes mb ON mb.address = m.mailbox_address
-    WHERE mb.user_id = ? AND m.direction = 'incoming' AND m.folder = 'inbox' AND m.status = 'ready'`,
+    WHERE mb.user_id = ? AND mb.cleanup_job_id IS NULL AND m.direction = 'incoming' AND m.folder = 'inbox' AND m.status = 'ready'`,
   icloud: `SELECT 'icloud' AS source, a.id AS account_id, CAST(m.imap_uid AS TEXT) AS message_id,
     m.sender_name, m.sender_address, m.subject, m.internal_date AS message_date, m.is_read
     FROM icloud_imap_messages m JOIN icloud_accounts a ON a.id = m.account_id

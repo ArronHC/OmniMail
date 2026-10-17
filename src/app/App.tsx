@@ -218,7 +218,7 @@ function Mailbox({
               config={config}
               mailboxes={mailboxes}
               domains={domains}
-              onDomainsChanged={loadDomains}
+              onDomainsChanged={loadMailboxData}
               onConfigChange={onConfigChange}
               onUserChange={onUserChange}
               onLogout={onLogout}

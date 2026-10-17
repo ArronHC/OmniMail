@@ -35,7 +35,7 @@ async function syncIdentity(env: Env, email: string): Promise<void> {
 
   if (ownerId) {
     await env.DB.prepare(
-      'UPDATE mailboxes SET user_id = ? WHERE is_hidden = 1 AND user_id != ?',
+      'UPDATE mailboxes SET user_id = ? WHERE is_hidden = 1 AND user_id != ? AND cleanup_job_id IS NULL',
     ).bind(ownerId, ownerId).run()
   }
 
